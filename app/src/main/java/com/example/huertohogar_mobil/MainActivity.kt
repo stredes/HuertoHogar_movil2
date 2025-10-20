@@ -11,9 +11,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.BottomAppBar
@@ -40,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -122,6 +121,13 @@ class MainActivity : ComponentActivity() {
                         composable(Routes.Registrarse.route) {
                             RegistrarseScreen()
                         }
+                        composable(Routes.FinPago.route) {
+                            FinPagoScreen(onVolverAlInicio = {
+                                nav.navigate(Routes.Inicio.route) {
+                                    popUpTo(Routes.Inicio.route) { inclusive = true }
+                                }
+                            })
+                        }
 
                         // Detalle
                         composable(
@@ -182,9 +188,7 @@ class MainActivity : ComponentActivity() {
                                     total = ui.totalCLP,
                                     onFinalizar = {
                                         vm.limpiarCarrito()
-                                        nav.navigate(Routes.Productos.route) {
-                                            popUpTo(Routes.Inicio.route)
-                                        }
+                                        nav.navigate(Routes.FinPago.route)
                                     },
                                     paddingValues = pv
                                 )
@@ -200,24 +204,24 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun BottomNavBar(navController: NavController) {
     val items = listOf(
-        Routes.Inicio,
-        Routes.Productos,
-        Routes.Nosotros,
-        Routes.Blog,
-        Routes.Contacto,
-        Routes.IniciarSesion,
-        Routes.Registrarse,
+        Routes.Inicio to Icons.Default.Home,
+        Routes.Productos to Icons.Default.Store,
+        Routes.Nosotros to Icons.Default.Info,
+        Routes.Blog to Icons.Default.Article,
+        Routes.Contacto to Icons.Default.Email,
+        Routes.IniciarSesion to Icons.Default.Person,
+        Routes.Registrarse to Icons.Default.PersonAdd,
     )
     NavigationBar {
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val currentRoute = navBackStackEntry?.destination?.route
-        items.forEach { item ->
+        items.forEach { (screen, icon) ->
             NavigationBarItem(
-                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                label = { Text(item.route.replaceFirstChar { it.uppercase() }) },
-                selected = currentRoute == item.route,
+                icon = { Icon(icon, contentDescription = null) },
+                label = { Text(screen.route.replaceFirstChar { it.uppercase() }) },
+                selected = currentRoute == screen.route,
                 onClick = {
-                    navController.navigate(item.route) {
+                    navController.navigate(screen.route) {
                         popUpTo(navController.graph.findStartDestination().id) {
                             saveState = true
                         }
