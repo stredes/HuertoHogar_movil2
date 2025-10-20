@@ -1,7 +1,5 @@
-// Rutas de navegaci�n
 package com.example.huertohogar_mobil.ui.nav
 
-/** Rutas tipadas para Navigation-Compose */
 sealed class Routes(val route: String) {
     data object Catalogo : Routes("catalogo")
     data object Carrito  : Routes("carrito")
@@ -10,4 +8,11 @@ sealed class Routes(val route: String) {
         fun create(id: String) = "detalle/$id"
         const val ARG_ID = "id"
     }
+    data object Inicio : Routes("inicio")
+    data object Productos : Routes("productos")
+    data object Nosotros : Routes("nosotros")
+    data object Blog : Routes("blog")
+    data object Contacto : Routes("contacto")
+    data object IniciarSesion : Routes("iniciar_sesion")
+    data object Registrarse : Routes("registrarse")
 }

@@ -24,12 +24,14 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,13 +48,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavController
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
-import androidx.navigation.navArgument
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.example.huertohogar_mobil.data.Producto
 import com.example.huertohogar_mobil.ui.nav.Routes
+import com.example.huertohogar_mobil.ui.screens.*
+import com.example.huertohogar_mobil.ui.theme.HuertoHogarMobilTheme
 import com.example.huertohogar_mobil.ui.viewmodel.MarketViewModel
 import com.example.huertohogar_mobil.ui.viewmodel.MarketViewModelFactory
 import java.text.NumberFormat
@@ -67,99 +74,121 @@ class MainActivity : ComponentActivity() {
             .get(MarketViewModel::class.java)
 
         setContent {
-            MaterialTheme(colorScheme = lightColorScheme()) {
+            HuertoHogarMobilTheme {
                 val nav = rememberNavController()
                 val ui = vm.ui.collectAsStateWithLifecycle().value
 
-                NavHost(
-                    navController = nav,
-                    startDestination = Routes.Catalogo.route
-                ) {
-                    // Catálogo
-                    composable(Routes.Catalogo.route) {
-                        TopScaffold(
-                            title = "HuertoHogar",
-                            countCarrito = ui.countCarrito,
-                            onCarrito = { nav.navigate(Routes.Carrito.route) }
-                        ) { pv ->
-                            CatalogoMinimal(
-                                productos = ui.productosFiltrados,
-                                onBuscar = vm::setQuery,
-                                onVer = { p ->
-                                    vm.seleccionar(p)
-                                    nav.navigate(Routes.Detalle.create(p.id))
-                                },
-                                onAgregar = { p -> vm.agregar(p, +1) },
-                                paddingValues = pv
-                            )
+                Scaffold(
+                    bottomBar = { BottomNavBar(navController = nav) }
+                ) { paddingValues ->
+                    NavHost(
+                        modifier = Modifier.padding(paddingValues),
+                        navController = nav,
+                        startDestination = Routes.Inicio.route
+                    ) {
+                        composable(Routes.Inicio.route) {
+                            InicioScreen(onNavigateToProductos = { nav.navigate(Routes.Productos.route) })
                         }
-                    }
-
-                    // Detalle
-                    composable(
-                        route = Routes.Detalle.route,
-                        arguments = listOf(
-                            navArgument(Routes.Detalle.ARG_ID) { type = NavType.StringType }
-                        )
-                    ) { backStack ->
-                        val id = backStack.arguments?.getString(Routes.Detalle.ARG_ID)
-                        val producto = ui.productos.firstOrNull { it.id == id }
-                        if (producto == null) {
-                            nav.popBackStack()
-                        } else {
+                        composable(Routes.Productos.route) {
                             TopScaffold(
-                                title = producto.nombre,
+                                title = "Productos 🥑",
                                 countCarrito = ui.countCarrito,
-                                onBack = { nav.popBackStack() },
                                 onCarrito = { nav.navigate(Routes.Carrito.route) }
                             ) { pv ->
-                                DetalleMinimal(
-                                    p = producto,
-                                    onAgregar = { vm.agregar(producto, +1) },
+                                CatalogoMinimal(
+                                    productos = ui.productosFiltrados,
+                                    onBuscar = vm::setQuery,
+                                    onVer = { p ->
+                                        vm.seleccionar(p)
+                                        nav.navigate(Routes.Detalle.create(p.id))
+                                    },
+                                    onAgregar = { p -> vm.agregar(p, +1) },
                                     paddingValues = pv
                                 )
                             }
                         }
-                    }
-
-                    // Carrito
-                    composable(Routes.Carrito.route) {
-                        TopScaffold(
-                            title = "Carrito",
-                            onBack = { nav.popBackStack() }
-                        ) { pv ->
-                            CarritoMinimal(
-                                lineas = ui.carrito.mapNotNull { (id, qty) ->
-                                    ui.productos.firstOrNull { it.id == id }?.let { it to qty }
-                                },
-                                onSumar = { p -> vm.agregar(p, +1) },
-                                onRestar = { p -> vm.agregar(p, -1) },
-                                total = ui.totalCLP,
-                                onCheckout = { nav.navigate(Routes.Checkout.route) },
-                                paddingValues = pv
-                            )
+                        composable(Routes.Nosotros.route) {
+                            NosotrosScreen()
                         }
-                    }
+                        composable(Routes.Blog.route) {
+                            BlogScreen()
+                        }
+                        composable(Routes.Contacto.route) {
+                            ContactoScreen()
+                        }
+                        composable(Routes.IniciarSesion.route) {
+                            IniciarSesionScreen()
+                        }
+                        composable(Routes.Registrarse.route) {
+                            RegistrarseScreen()
+                        }
 
-                    // Checkout
-                    composable(Routes.Checkout.route) {
-                        TopScaffold(
-                            title = "Checkout",
-                            onBack = { nav.popBackStack() }
-                        ) { pv ->
-                            CheckoutMinimal(
-                                lineas = ui.carrito.mapNotNull { (id, qty) ->
-                                    ui.productos.firstOrNull { it.id == id }?.let { it to qty }
-                                },
-                                total = ui.totalCLP,
-                                onFinalizar = {
-                                    vm.limpiarCarrito()
-                                    nav.navigate(Routes.Catalogo.route) {
-                                        popUpTo(Routes.Catalogo.route) { inclusive = true }
-                                    }
-                                },
-                                paddingValues = pv
+                        // Detalle
+                        composable(
+                            route = Routes.Detalle.route,
+                            arguments = listOf(
+                                navArgument(Routes.Detalle.ARG_ID) { type = NavType.StringType }
                             )
+                        ) { backStack ->
+                            val id = backStack.arguments?.getString(Routes.Detalle.ARG_ID)
+                            val producto = ui.productos.firstOrNull { it.id == id }
+                            if (producto == null) {
+                                nav.popBackStack()
+                            } else {
+                                TopScaffold(
+                                    title = producto.nombre,
+                                    countCarrito = ui.countCarrito,
+                                    onBack = { nav.popBackStack() },
+                                    onCarrito = { nav.navigate(Routes.Carrito.route) }
+                                ) { pv ->
+                                    DetalleMinimal(
+                                        p = producto,
+                                        onAgregar = { vm.agregar(producto, +1) },
+                                        paddingValues = pv
+                                    )
+                                }
+                            }
+                        }
+
+                        // Carrito
+                        composable(Routes.Carrito.route) {
+                            TopScaffold(
+                                title = "Carrito",
+                                onBack = { nav.popBackStack() }
+                            ) { pv ->
+                                CarritoMinimal(
+                                    lineas = ui.carrito.mapNotNull { (id, qty) ->
+                                        ui.productos.firstOrNull { it.id == id }?.let { it to qty }
+                                    },
+                                    onSumar = { p -> vm.agregar(p, +1) },
+                                    onRestar = { p -> vm.agregar(p, -1) },
+                                    total = ui.totalCLP,
+                                    onCheckout = { nav.navigate(Routes.Checkout.route) },
+                                    paddingValues = pv
+                                )
+                            }
+                        }
+
+                        // Checkout
+                        composable(Routes.Checkout.route) {
+                            TopScaffold(
+                                title = "Checkout",
+                                onBack = { nav.popBackStack() }
+                            ) { pv ->
+                                CheckoutMinimal(
+                                    lineas = ui.carrito.mapNotNull { (id, qty) ->
+                                        ui.productos.firstOrNull { it.id == id }?.let { it to qty }
+                                    },
+                                    total = ui.totalCLP,
+                                    onFinalizar = {
+                                        vm.limpiarCarrito()
+                                        nav.navigate(Routes.Productos.route) {
+                                            popUpTo(Routes.Inicio.route)
+                                        }
+                                    },
+                                    paddingValues = pv
+                                )
+                            }
                         }
                     }
                 }
@@ -167,6 +196,40 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+
+@Composable
+fun BottomNavBar(navController: NavController) {
+    val items = listOf(
+        Routes.Inicio,
+        Routes.Productos,
+        Routes.Nosotros,
+        Routes.Blog,
+        Routes.Contacto,
+        Routes.IniciarSesion,
+        Routes.Registrarse,
+    )
+    NavigationBar {
+        val navBackStackEntry by navController.currentBackStackEntryAsState()
+        val currentRoute = navBackStackEntry?.destination?.route
+        items.forEach { item ->
+            NavigationBarItem(
+                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                label = { Text(item.route.replaceFirstChar { it.uppercase() }) },
+                selected = currentRoute == item.route,
+                onClick = {
+                    navController.navigate(item.route) {
+                        popUpTo(navController.graph.findStartDestination().id) {
+                            saveState = true
+                        }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
+            )
+        }
+    }
+}
+
 
 /* -------------------- UI Helpers mínimas (provisorias) -------------------- */
 
@@ -202,7 +265,13 @@ private fun TopScaffold(
                             }
                         }
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary
+                )
             )
         },
         content = content
