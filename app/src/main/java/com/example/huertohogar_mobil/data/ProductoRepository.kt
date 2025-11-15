@@ -1,5 +1,6 @@
 package com.example.huertohogar_mobil.data
 
+import com.example.huertohogar_mobil.model.Producto
 import kotlinx.coroutines.flow.Flow
 
 /**

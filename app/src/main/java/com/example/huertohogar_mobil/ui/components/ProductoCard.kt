@@ -46,14 +46,16 @@ fun ProductoCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             val shape = RoundedCornerShape(12.dp)
-            Image(
-                painter = painterResource(p.imagen),
-                contentDescription = p.nombre,
-                modifier = Modifier
-                    .size(64.dp)
-                    .clip(shape),
-                contentScale = ContentScale.Crop
-            )
+            p.imagen?.let {
+                Image(
+                    painter = painterResource(it),
+                    contentDescription = p.nombre,
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(shape),
+                    contentScale = ContentScale.Crop
+                )
+            }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(p.nombre, fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
