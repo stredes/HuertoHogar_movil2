@@ -10,8 +10,17 @@ import com.example.huertohogar_mobil.model.Usuario
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import com.example.huertohogar_mobil.data.ProductoDao
+import kotlin.Int
+import kotlin.String
 
-@Database(entities = [Usuario::class, Producto::class], version = 1, exportSchema = false)
+@Database(
+    entities = [
+        Usuario::class,
+        Producto::class
+       ],
+        version = 1,
+        )
 abstract class HuertoHogarDatabase : RoomDatabase() {
 
     abstract fun usuarioDao(): UsuarioDao
@@ -19,34 +28,41 @@ abstract class HuertoHogarDatabase : RoomDatabase() {
 
     companion object {
         @Volatile
-        private var INSTANCE: HuertoHogarDatabase? = null
+        private var database: HuertoHogarDatabase? = null
+
+
 
         fun getDatabase(context: Context): HuertoHogarDatabase {
-            return INSTANCE ?: synchronized(this) {
-                Room.databaseBuilder(
-                    context.applicationContext,
+            if (com.example.huertohogar_mobil.data.HuertoHogarDatabase.Companion.database == null) {
+                com.example.huertohogar_mobil.data.HuertoHogarDatabase.Companion.database = Room.databaseBuilder(
+                    context,
                     HuertoHogarDatabase::class.java,
-                    "huertohogar_db"
+                    "pokestore.db"
                 )
-                    .allowMainThreadQueries() // Permitir consultas en el hilo principal (solución rápida)
+                    .fallbackToDestructiveMigration()   // Eliminar la base de datos al cambiar la version
                     .addCallback(object : Callback() {
                         override fun onCreate(db: SupportSQLiteDatabase) {
                             super.onCreate(db)
-                            CoroutineScope(Dispatchers.IO).launch {
-                                repopulateDb(getDatabase(context))
+                            CoroutineScope(Dispatchers.IO).launch{
+                                repopulateDb(com.example.huertohogar_mobil.data.HuertoHogarDatabase.Companion.database!!)
                             }
                         }
                     })
-                    .build().also { INSTANCE = it }
+                    .setJournalMode(JournalMode.TRUNCATE)
+                    .build()
             }
+            return com.example.huertohogar_mobil.data.HuertoHogarDatabase.Companion.database!!
         }
+
+
+
 
         private suspend fun repopulateDb(db: HuertoHogarDatabase) {
             val productoDao = db.productoDao()
             val usuarioDao = db.usuarioDao()
 
             // 1. Usuario de prueba
-            usuarioDao.insertar(Usuario(nombre = "Cliente Demo", correo = "usuario@duocuc.cl", contrasena = "1234"))
+            usuarioDao.insertar(Usuario(nombre = "Cliente", correo = "usuario@duocuc.cl", contrasena = "1234"))
 
             // 2. Productos
             val productos = listOf(
@@ -54,7 +70,7 @@ abstract class HuertoHogarDatabase : RoomDatabase() {
                 Producto(code="FR002", nombre="Naranjas Valencia", precio=1000, unidad="kg", stock=200, imagen="naranja", descripcion="Jugosas", origen="Coquimbo", categoria="Frutas Frescas"),
                 Producto(code="FR003", nombre="Plátanos Cavendish", precio=800, unidad="kg", stock=250, imagen="platanos_cavendish", descripcion="Energéticos", origen="Los Ríos", categoria="Frutas Frescas"),
                 Producto(code="VR001", nombre="Zanahorias Orgánicas", precio=900, unidad="kg", stock=100, imagen="zanahoria", descripcion="Sin pesticidas", origen="Metropolitana", categoria="Verduras Orgánicas"),
-                Producto(code="VR002", nombre="Espinacas Frescas", precio=700, unidad="500 g", stock=80, imagen="espinacas", descripcion="Ricas en hierro", origen="O'Higgins", categoria="Verduras Orgánicas"),
+                Producto(code="VR002", nombre="Espinacas Frescas", precio=700, unidad="g", stock=80, imagen="espinacas", descripcion="Ricas en hierro", origen="O'Higgins", categoria="Verduras Orgánicas"),
                 Producto(code="VR003", nombre="Pimientos Tricolores", precio=1500, unidad="kg", stock=120, imagen="pimientos_tricolores", descripcion="Para salteados", origen="Biobío", categoria="Verduras Orgánicas"),
                 Producto(code="PO001", nombre="Miel Orgánica", precio=5000, unidad="frasco", stock=50, imagen="miel", descripcion="Pura", origen="Los Lagos", categoria="Productos Orgánicos"),
                 Producto(code="PL001", nombre="Leche Entera", precio=1200, unidad="1 L", stock=90, imagen="leche_1l", descripcion="Fuente de calcio", origen="Araucanía", categoria="Productos Lácteos")
