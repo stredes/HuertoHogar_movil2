@@ -6,8 +6,8 @@ import androidx.room.PrimaryKey
 @Entity(tableName = "producto")
 data class Producto(
     @PrimaryKey(autoGenerate = true)
-    val id: Int = 0,
-    val code: String,
+    val id: Int = 0, // ID numérico para la base de datos
+    val code: String, // Código único que usaremos en la lógica de la app
     val nombre: String,
     val precio: Int,
     val unidad: String,

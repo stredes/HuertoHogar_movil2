@@ -11,18 +11,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.huertohogar_mobil.model.Producto
 import com.example.huertohogar_mobil.ui.components.ProductoCard
 import com.example.huertohogar_mobil.ui.theme.BrownHuerto
-import com.example.huertohogar_mobil.viewmodel.CatalogoViewModel
+import com.example.huertohogar_mobil.viewmodel.MarketViewModel
 
 @Composable
-fun CatalogoScreen(navController: NavController) {
-    val viewModel: CatalogoViewModel = viewModel()
-    // Observamos la base de datos en tiempo real
-    val productos by viewModel.productos.collectAsState()
+fun CatalogoScreen(
+    navController: NavController, 
+    viewModel: MarketViewModel // 1. Recibimos el MarketViewModel
+) {
+    // 2. Observamos el estado (MarketUiState) que expone el ViewModel
+    val uiState by viewModel.ui.collectAsState()
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text(
@@ -33,8 +34,11 @@ fun CatalogoScreen(navController: NavController) {
             modifier = Modifier.padding(bottom = 16.dp)
         )
 
-        LazyColumn {
-            items(productos) { producto ->
+        // 3. Mostramos la lista de productos del estado
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(uiState.productosFiltrados) { producto ->
+                // Usamos el ProductoCard que ya tenías.
+                // ¡Más adelante podemos modificarlo para que sea interactivo!
                 ProductoCard(producto = producto)
             }
         }

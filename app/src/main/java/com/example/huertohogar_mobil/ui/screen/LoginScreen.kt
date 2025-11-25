@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.huertohogar_mobil.R
+import com.example.huertohogar_mobil.navigation.Routes
 import com.example.huertohogar_mobil.ui.components.BotonHuerto
 import com.example.huertohogar_mobil.ui.components.CampoTexto
 import com.example.huertohogar_mobil.ui.theme.GreenHuerto
@@ -73,8 +74,10 @@ fun LoginScreen(navController: NavController) {
             scope.launch {
                 val exito = viewModel.login(correo, password)
                 if (exito) {
-                    navController.navigate("catalogo") {
-                        popUpTo("login") { inclusive = true }
+                    // Navega a la pantalla principal de la app
+                    navController.navigate("main") {
+                        // Limpia el stack de navegación para que el usuario no pueda volver al Login
+                        popUpTo(Routes.IniciarSesion.route) { inclusive = true }
                     }
                 } else {
                     mensajeError = "Credenciales inválidas o correo no permitido"
