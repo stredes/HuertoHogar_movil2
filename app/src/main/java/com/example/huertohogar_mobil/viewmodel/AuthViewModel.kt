@@ -27,11 +27,17 @@ class AuthViewModel @Inject constructor(
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
 
     fun register(name: String, email: String, passwordHash: String) {
+        // Limpiamos los datos: quitamos espacios y normalizamos el email
+        val safeName = name.trim()
+        val safeEmail = email.trim().lowercase()
+        val safePassword = passwordHash.trim()
+
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
-            val success = userRepository.registerUser(name, email, passwordHash)
+            val success = userRepository.registerUser(safeName, safeEmail, safePassword)
             if (success) {
-                login(email, passwordHash)
+                // Intentamos loguear automáticamente con las credenciales limpias
+                login(safeEmail, safePassword)
             } else {
                 _uiState.update { it.copy(isLoading = false, error = "El usuario ya existe") }
             }
@@ -39,9 +45,12 @@ class AuthViewModel @Inject constructor(
     }
 
     fun login(email: String, passwordHash: String) {
+        val safeEmail = email.trim().lowercase()
+        val safePassword = passwordHash.trim()
+
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
-            val user = userRepository.loginUser(email, passwordHash)
+            val user = userRepository.loginUser(safeEmail, safePassword)
             if (user != null) {
                 _uiState.update { it.copy(user = user, isLoading = false) }
             } else {
