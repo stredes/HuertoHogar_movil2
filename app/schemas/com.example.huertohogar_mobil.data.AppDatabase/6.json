@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 6,
-    "identityHash": "89c085c43aac2398ee260b905a7bf678",
+    "identityHash": "b811af05ce1d536d20272f6d5c9bff82",
     "entities": [
       {
         "tableName": "productos",
@@ -204,7 +204,26 @@
             "amigoId"
           ]
         },
-        "indices": [],
+        "indices": [
+          {
+            "name": "index_amistades_usuarioId",
+            "unique": false,
+            "columnNames": [
+              "usuarioId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_amistades_usuarioId` ON `${TABLE_NAME}` (`usuarioId`)"
+          },
+          {
+            "name": "index_amistades_amigoId",
+            "unique": false,
+            "columnNames": [
+              "amigoId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_amistades_amigoId` ON `${TABLE_NAME}` (`amigoId`)"
+          }
+        ],
         "foreignKeys": [
           {
             "table": "users",
@@ -271,7 +290,26 @@
             "id"
           ]
         },
-        "indices": [],
+        "indices": [
+          {
+            "name": "index_mensajes_chat_remitenteId",
+            "unique": false,
+            "columnNames": [
+              "remitenteId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_mensajes_chat_remitenteId` ON `${TABLE_NAME}` (`remitenteId`)"
+          },
+          {
+            "name": "index_mensajes_chat_destinatarioId",
+            "unique": false,
+            "columnNames": [
+              "destinatarioId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_mensajes_chat_destinatarioId` ON `${TABLE_NAME}` (`destinatarioId`)"
+          }
+        ],
         "foreignKeys": [
           {
             "table": "users",
@@ -301,7 +339,7 @@
     "views": [],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '89c085c43aac2398ee260b905a7bf678')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'b811af05ce1d536d20272f6d5c9bff82')"
     ]
   }
 }

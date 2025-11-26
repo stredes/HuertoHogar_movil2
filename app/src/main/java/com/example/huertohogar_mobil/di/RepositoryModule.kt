@@ -1,5 +1,7 @@
 package com.example.huertohogar_mobil.di
 
+import com.example.huertohogar_mobil.data.FirebaseProductsRepository
+import com.example.huertohogar_mobil.data.ProductsRepository
 import com.example.huertohogar_mobil.data.ProductoRepository
 import com.example.huertohogar_mobil.data.RoomProductoRepository
 import dagger.Binds
@@ -14,7 +16,13 @@ abstract class RepositoryModule {
 
     @Binds
     @Singleton
+    abstract fun bindProductsRepository(
+        firebaseProductsRepository: FirebaseProductsRepository
+    ): ProductsRepository
+
+    @Binds
+    @Singleton
     abstract fun bindProductoRepository(
-        roomRepository: RoomProductoRepository
+        roomProductoRepository: RoomProductoRepository
     ): ProductoRepository
 }

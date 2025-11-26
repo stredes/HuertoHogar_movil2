@@ -4,7 +4,8 @@ plugins {
     alias(libs.plugins.kotlin.android) apply false
     alias(libs.plugins.kotlin.compose) apply false
     alias(libs.plugins.kotlin.kapt) apply false
-
-    // 🔹 agrega el plugin de Hilt aquí con versión
+    
+    // Plugins globales
     id("com.google.dagger.hilt.android") version "2.51.1" apply false
+    alias(libs.plugins.google.services) apply false
 }
