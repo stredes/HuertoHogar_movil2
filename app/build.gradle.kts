@@ -6,7 +6,6 @@ plugins {
     id("com.google.dagger.hilt.android")
 }
 
-
 android {
     namespace = "com.example.huertohogar_mobil"
 
@@ -20,6 +19,13 @@ android {
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Configuración para exportar el esquema de Room
+        javaCompileOptions {
+            annotationProcessorOptions {
+                arguments["room.schemaLocation"] = "$projectDir/schemas"
+            }
+        }
     }
 
     buildTypes {
@@ -43,6 +49,13 @@ android {
 
     buildFeatures {
         compose = true
+    }
+}
+
+// Configuración adicional para kapt si javaCompileOptions no es suficiente en algunas versiones
+kapt {
+    arguments {
+        arg("room.schemaLocation", "$projectDir/schemas")
     }
 }
 
