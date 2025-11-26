@@ -1,0 +1,1 @@
+// Archivo eliminado. La clase Producto se ha movido a com.example.huertohogar_mobil.model.Producto
