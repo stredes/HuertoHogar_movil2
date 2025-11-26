@@ -24,9 +24,7 @@ fun BottomNavBar(navController: NavController) {
         NavItem(Routes.Inicio, Icons.Default.Home),
         NavItem(Routes.Productos, Icons.Default.Store),
         NavItem(Routes.Nosotros, Icons.Default.Info),
-        NavItem(Routes.Contacto, Icons.Default.Email),
-        NavItem(Routes.IniciarSesion, Icons.Default.Person)
-        // Saqué Registrarse para no saturar la barra, se puede acceder desde Login
+        NavItem(Routes.Contacto, Icons.Default.Email)
     )
 
     NavigationBar {

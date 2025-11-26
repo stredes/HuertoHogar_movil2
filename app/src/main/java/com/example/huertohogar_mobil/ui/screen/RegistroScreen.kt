@@ -14,21 +14,22 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import com.example.huertohogar_mobil.navigation.Routes
 import com.example.huertohogar_mobil.ui.components.BotonHuerto
 import com.example.huertohogar_mobil.ui.components.CampoTexto
 import com.example.huertohogar_mobil.ui.theme.GreenHuerto
-import com.example.huertohogar_mobil.viewmodel.LoginViewModel
+import com.example.huertohogar_mobil.viewmodel.RegistroViewModel
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LoginScreen(navController: NavController) {
-    val viewModel: LoginViewModel = viewModel()
+fun RegistroScreen(navController: NavController) {
+    val viewModel: RegistroViewModel = viewModel()
     val scope = rememberCoroutineScope()
 
+    var nombre by remember { mutableStateOf("") }
     var correo by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var confirmarPassword by remember { mutableStateOf("") }
     var mensajeError by remember { mutableStateOf("") }
 
     Scaffold(
@@ -52,13 +53,21 @@ fun LoginScreen(navController: NavController) {
             verticalArrangement = Arrangement.Center
         ) {
             Text(
-                text = "🥑 HuertoHogar",
+                text = "Registro",
                 fontSize = 32.sp,
                 fontWeight = FontWeight.Bold,
                 color = GreenHuerto
             )
 
             Spacer(modifier = Modifier.height(32.dp))
+
+            CampoTexto(
+                valor = nombre,
+                onValorCambio = { nombre = it },
+                etiqueta = "Nombre Completo"
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
 
             CampoTexto(
                 valor = correo,
@@ -75,6 +84,15 @@ fun LoginScreen(navController: NavController) {
                 visualTransformation = PasswordVisualTransformation()
             )
 
+            Spacer(modifier = Modifier.height(16.dp))
+
+            CampoTexto(
+                valor = confirmarPassword,
+                onValorCambio = { confirmarPassword = it },
+                etiqueta = "Confirmar Contraseña",
+                visualTransformation = PasswordVisualTransformation()
+            )
+
             if (mensajeError.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(text = mensajeError, color = Color.Red)
@@ -82,21 +100,19 @@ fun LoginScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            BotonHuerto(texto = "Iniciar Sesión") {
+            BotonHuerto(texto = "Registrarse") {
+                if (password != confirmarPassword) {
+                    mensajeError = "Las contraseñas no coinciden"
+                    return@BotonHuerto
+                }
                 scope.launch {
-                    val exito = viewModel.login(correo, password)
+                    val exito = viewModel.register(nombre, correo, password)
                     if (exito) {
-                        navController.navigate("main") {
-                            popUpTo(Routes.IniciarSesion.route) { inclusive = true }
-                        }
+                        navController.popBackStack() // Volver a Login
                     } else {
-                        mensajeError = "Credenciales inválidas o correo no permitido"
+                        mensajeError = "Error en el registro. Inténtalo de nuevo."
                     }
                 }
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-            TextButton(onClick = { navController.navigate(Routes.Registrarse.route) }) {
-                Text("¿No tienes cuenta? Regístrate")
             }
         }
     }
