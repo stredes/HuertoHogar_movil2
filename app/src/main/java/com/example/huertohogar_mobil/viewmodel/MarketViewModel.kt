@@ -1,23 +1,24 @@
 package com.example.huertohogar_mobil.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.huertohogar_mobil.data.CarritoDao
+import com.example.huertohogar_mobil.data.MensajeRepository
 import com.example.huertohogar_mobil.data.ProductoRepository
+import com.example.huertohogar_mobil.model.CarritoItem
 import com.example.huertohogar_mobil.model.Producto
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.util.UUID
 import javax.inject.Inject
 
-/**
- * Estado inmutable de la UI para HuertoHogar.
- */
+private const val TAG = "DB_DEBUG_MARKET"
+
 data class MarketUiState(
     val productos: List<Producto> = emptyList(),
-    val carrito: Map<String, Int> = emptyMap(), // idProducto -> cantidad
+    val carrito: Map<String, Int> = emptyMap(),
     val seleccionado: Producto? = null,
     val query: String = ""
 ) {
@@ -32,32 +33,39 @@ data class MarketUiState(
     }
 }
 
-/**
- * ViewModel MVVM con Hilt.
- * - Observa el catálogo desde el Repository (Flow)
- * - Expone estado inmutable para Compose
- * - Contiene la lógica de negocio del carrito
- */
 @HiltViewModel
 class MarketViewModel @Inject constructor(
-    private val repo: ProductoRepository
+    private val repo: ProductoRepository,
+    private val carritoDao: CarritoDao,
+    private val mensajeRepo: MensajeRepository // Agregamos repo de mensajes
 ) : ViewModel() {
 
     private val _ui = MutableStateFlow(MarketUiState())
     val ui: StateFlow<MarketUiState> = _ui.asStateFlow()
 
     init {
-        // Cargar catálogo reactivo desde el repositorio
         viewModelScope.launch {
-            // Asegurar que la BD tenga datos iniciales
             repo.ensureSeeded()
             
-            // Observar cambios
-            repo.productos().collect { list ->
+            combine(
+                repo.productos(),
+                carritoDao.getCarrito()
+            ) { productos, itemsCarrito ->
+                val carritoMap = itemsCarrito.associate { it.productoId to it.cantidad }
+                
                 val seleccionadoActualizado = _ui.value.seleccionado?.let { sel ->
-                    list.firstOrNull { it.id == sel.id }
+                    productos.firstOrNull { it.id == sel.id }
                 }
-                _ui.update { it.copy(productos = list, seleccionado = seleccionadoActualizado) }
+                
+                Log.d(TAG, "🔄 Sincronizando UI: ${productos.size} productos, ${carritoMap.size} items en carrito")
+                
+                _ui.value.copy(
+                    productos = productos,
+                    carrito = carritoMap,
+                    seleccionado = seleccionadoActualizado
+                )
+            }.collect { newState ->
+                _ui.value = newState
             }
         }
     }
@@ -66,17 +74,76 @@ class MarketViewModel @Inject constructor(
 
     fun agregar(p: Producto, delta: Int = 1) {
         if (delta == 0) return
-        _ui.update { state ->
-            val actual = state.carrito[p.id] ?: 0
-            val nuevo = (actual + delta).coerceAtLeast(0)
-            val nuevoMapa = if (nuevo == 0) state.carrito - p.id else state.carrito + (p.id to nuevo)
-            state.copy(carrito = nuevoMapa)
+        
+        viewModelScope.launch {
+            val actualQty = _ui.value.carrito[p.id] ?: 0
+            val nuevoQty = (actualQty + delta).coerceAtLeast(0)
+            
+            Log.d(TAG, "🛒 Modificando carrito: ${p.nombre} -> Cantidad: $nuevoQty")
+
+            if (nuevoQty > 0) {
+                carritoDao.insertItem(CarritoItem(p.id, nuevoQty))
+            } else {
+                carritoDao.deleteItem(p.id)
+            }
         }
     }
 
     fun quitar(p: Producto) = agregar(p, -1)
 
-    fun limpiarCarrito() { _ui.update { it.copy(carrito = emptyMap()) } }
+    fun limpiarCarrito() {
+        Log.d(TAG, "🗑️ Vaciando carrito en BD...")
+        viewModelScope.launch {
+            carritoDao.clearCarrito()
+        }
+    }
 
     fun setQuery(value: String) { _ui.update { it.copy(query = value) } }
+
+    fun crearProducto(nombre: String, precio: Int, unidad: String, desc: String, uri: String?) {
+        viewModelScope.launch {
+            Log.d(TAG, "💾 Guardando nuevo producto...")
+            val nuevo = Producto(
+                id = UUID.randomUUID().toString(),
+                nombre = nombre,
+                precioCLP = precio,
+                unidad = unidad,
+                descripcion = desc,
+                imagenRes = 0,
+                imagenUri = uri
+            )
+            repo.agregarProducto(nuevo)
+        }
+    }
+
+    fun editarProducto(id: String, nombre: String, precio: Int, unidad: String, desc: String, uri: String?, originalImgRes: Int) {
+        viewModelScope.launch {
+            Log.d(TAG, "💾 Editando producto $id...")
+            val actualizado = Producto(
+                id = id,
+                nombre = nombre,
+                precioCLP = precio,
+                unidad = unidad,
+                descripcion = desc,
+                imagenRes = originalImgRes,
+                imagenUri = uri
+            )
+            repo.actualizarProducto(actualizado)
+        }
+    }
+
+    fun eliminarProducto(producto: Producto) {
+        viewModelScope.launch {
+            Log.d(TAG, "🗑️ Eliminando producto ${producto.id}...")
+            carritoDao.deleteItem(producto.id)
+            repo.eliminarProducto(producto)
+        }
+    }
+
+    // Nueva función para enviar contacto
+    fun enviarContacto(nombre: String, email: String, mensaje: String) {
+        viewModelScope.launch {
+            mensajeRepo.enviarMensaje(nombre, email, mensaje)
+        }
+    }
 }

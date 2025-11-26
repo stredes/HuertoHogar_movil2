@@ -17,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.example.huertohogar_mobil.model.Producto
 import com.example.huertohogar_mobil.ui.screen.formatoCLP
 
@@ -36,21 +37,34 @@ fun ProductoCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             val shape = RoundedCornerShape(12.dp)
-            p.imagenResId?.let {
-                Image(
-                    painter = painterResource(it),
-                    contentDescription = p.nombre,
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(shape),
-                    contentScale = ContentScale.Crop
-                )
+            
+            // Lógica de visualización de imagen: Prioridad URI > Resource
+            Box(modifier = Modifier.size(64.dp).clip(shape)) {
+                if (p.imagenUri != null) {
+                    AsyncImage(
+                        model = p.imagenUri,
+                        contentDescription = p.nombre,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    // Fallback a recurso local o placeholder si es 0
+                    if (p.imagenRes != 0) {
+                        Image(
+                            painter = painterResource(p.imagenRes),
+                            contentDescription = p.nombre,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
             }
+
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(p.nombre, fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
-                Text(p.descripcion, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text("${formatoCLP(p.precioCLP)} / ${p.unidad}")
+                Text(p.descripcion, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+                Text("${formatoCLP(p.precioCLP)} / ${p.unidad}", style = MaterialTheme.typography.labelLarge)
             }
             IconButton(onClick = onAgregar) {
                 Icon(Icons.Filled.Add, contentDescription = "Agregar")

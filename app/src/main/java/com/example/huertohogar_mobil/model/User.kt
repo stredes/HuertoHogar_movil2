@@ -8,5 +8,6 @@ data class User(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val name: String,
     val email: String,
-    val passwordHash: String // En producción usar hash real, aquí texto simple por ahora
+    val passwordHash: String,
+    val role: String = "user" // "admin" o "user"
 )

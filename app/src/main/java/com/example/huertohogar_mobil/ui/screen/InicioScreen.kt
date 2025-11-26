@@ -8,8 +8,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -20,7 +24,10 @@ import androidx.compose.ui.unit.dp
 import com.example.huertohogar_mobil.R
 
 @Composable
-fun InicioScreen(onNavigateToProductos: () -> Unit) {
+fun InicioScreen(
+    onNavigateToProductos: () -> Unit,
+    onLogout: () -> Unit = {}
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -28,6 +35,9 @@ fun InicioScreen(onNavigateToProductos: () -> Unit) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        // Botón de Salir en la parte superior derecha (opcional) o abajo
+        // Para simplificar, lo pondremos al final
+        
         Image(
             painter = painterResource(id = R.drawable.icono),
             contentDescription = "Logo HuertoHogar",
@@ -48,6 +58,14 @@ fun InicioScreen(onNavigateToProductos: () -> Unit) {
         Spacer(modifier = Modifier.height(32.dp))
         Button(onClick = onNavigateToProductos) {
             Text("Ver Productos")
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        OutlinedButton(onClick = onLogout) {
+            Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null)
+            Spacer(modifier = Modifier.size(8.dp))
+            Text("Cerrar Sesión")
         }
     }
 }
