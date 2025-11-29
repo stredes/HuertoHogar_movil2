@@ -1,10 +1,6 @@
 package com.example.huertohogar_mobil.ui.components
 
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -18,14 +14,14 @@ fun HuertoTextArea(
     minLines: Int = 3,
     maxLines: Int = 5
 ) {
-    OutlinedTextField(
+    HuertoTextField(
         value = value,
         onValueChange = onValueChange,
-        label = { Text(label) },
-        modifier = modifier.fillMaxWidth(),
+        label = label,
+        modifier = modifier,
         minLines = minLines,
         maxLines = maxLines,
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(12.dp),
         singleLine = false
     )
 }

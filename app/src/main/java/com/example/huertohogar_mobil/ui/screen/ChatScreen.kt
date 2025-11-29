@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.huertohogar_mobil.ui.components.HuertoChatBubble
+import com.example.huertohogar_mobil.ui.components.HuertoTextField
 import com.example.huertohogar_mobil.ui.components.HuertoTopBar
 import com.example.huertohogar_mobil.viewmodel.SocialViewModel
 
@@ -52,11 +53,11 @@ fun ChatScreen(
                     .padding(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                OutlinedTextField(
+                HuertoTextField(
                     value = texto,
                     onValueChange = { texto = it },
                     modifier = Modifier.weight(1f),
-                    placeholder = { Text("Escribe un mensaje...") },
+                    placeholder = "Escribe un mensaje...",
                     shape = RoundedCornerShape(24.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
@@ -81,10 +82,7 @@ fun ChatScreen(
                 .padding(horizontal = 16.dp),
             reverseLayout = true 
             // Nota: Usualmente invertimos la lista para chats, pero depende de cómo venga del VM. 
-            // Asumiendo que queremos lo último abajo. Si la lista viene cronológica ASC, reverseLayout=false y scroll to bottom.
-            // Si viene DESC (el 0 es el mas nuevo), entonces reverseLayout=true.
-            // En este código original estaba reverseLayout=true pero items(mensajes) tal cual.
-            // Mantendremos consistencia visual.
+            // Asumiendo que queremos lo último abajo.
         ) {
             items(mensajes) { msg ->
                 val esMio = msg.remitenteId == currentUser?.id

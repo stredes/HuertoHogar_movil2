@@ -18,9 +18,13 @@ fun HuertoTextField(
     modifier: Modifier = Modifier,
     label: String? = null,
     placeholder: String? = null,
+    leadingIcon: @Composable (() -> Unit)? = null,
+    trailingIcon: @Composable (() -> Unit)? = null,
     visualTransformation: VisualTransformation = VisualTransformation.None,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     singleLine: Boolean = true,
+    minLines: Int = 1,
+    maxLines: Int = if (singleLine) 1 else Int.MAX_VALUE,
     isError: Boolean = false,
     shape: Shape = RoundedCornerShape(12.dp)
 ) {
@@ -29,10 +33,14 @@ fun HuertoTextField(
         onValueChange = onValueChange,
         label = if (label != null) { { Text(label) } } else null,
         placeholder = if (placeholder != null) { { Text(placeholder) } } else null,
+        leadingIcon = leadingIcon,
+        trailingIcon = trailingIcon,
         modifier = modifier.fillMaxWidth(),
         visualTransformation = visualTransformation,
         keyboardOptions = keyboardOptions,
         singleLine = singleLine,
+        minLines = minLines,
+        maxLines = maxLines,
         isError = isError,
         shape = shape
     )

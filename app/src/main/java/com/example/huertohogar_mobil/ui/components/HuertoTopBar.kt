@@ -1,5 +1,6 @@
 package com.example.huertohogar_mobil.ui.components
 
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
@@ -32,4 +33,3 @@ fun HuertoTopBar(
         )
     )
 }
-import androidx.compose.foundation.layout.RowScope

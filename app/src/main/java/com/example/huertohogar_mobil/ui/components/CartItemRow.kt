@@ -19,9 +19,8 @@ fun CartItemRow(
     onSumar: () -> Unit,
     onRestar: () -> Unit
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+    HuertoCard(
+        modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier.padding(12.dp),
