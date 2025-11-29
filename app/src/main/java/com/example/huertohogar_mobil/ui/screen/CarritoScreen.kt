@@ -5,6 +5,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -14,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import com.example.huertohogar_mobil.model.Producto
 import com.example.huertohogar_mobil.ui.components.CartItemRow
 import com.example.huertohogar_mobil.ui.components.HuertoButton
+import com.example.huertohogar_mobil.ui.components.HuertoIconButton
 import com.example.huertohogar_mobil.ui.components.HuertoTopBar
 import com.example.huertohogar_mobil.viewmodel.MarketUiState
 
@@ -23,14 +25,26 @@ fun CarritoScreen(
     onSumar: (Producto) -> Unit,
     onRestar: (Producto) -> Unit,
     onBack: () -> Unit,
-    onCheckout: () -> Unit
+    onCheckout: () -> Unit,
+    onCompartir: (() -> Unit)? = null
 ) {
     Scaffold(
         topBar = {
             HuertoTopBar(
                 title = "Carrito",
                 canNavigateBack = true,
-                onNavigateBack = onBack
+                onNavigateBack = onBack,
+                actions = {
+                     if (ui.carrito.isNotEmpty() && onCompartir != null) {
+                         HuertoIconButton(onClick = onCompartir) {
+                             Icon(
+                                 imageVector = Icons.Default.Share,
+                                 contentDescription = "Compartir Lista",
+                                 tint = MaterialTheme.colorScheme.onPrimary
+                             )
+                         }
+                     }
+                }
             )
         },
         bottomBar = {

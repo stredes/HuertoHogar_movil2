@@ -31,4 +31,5 @@ sealed class Routes(val route: String) {
         const val ARG_ID = "id"
         const val ARG_NOMBRE = "nombre"
     }
+    data object CompartirCarrito : Routes("compartir_carrito")
 }

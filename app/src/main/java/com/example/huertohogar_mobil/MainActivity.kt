@@ -25,12 +25,14 @@ import com.example.huertohogar_mobil.ui.screen.*
 import com.example.huertohogar_mobil.ui.theme.HuertoHogarMobilTheme
 import com.example.huertohogar_mobil.viewmodel.AuthViewModel
 import com.example.huertohogar_mobil.viewmodel.MarketViewModel
+import com.example.huertohogar_mobil.viewmodel.SocialViewModel // Importar SocialViewModel
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     private val vm: MarketViewModel by viewModels()
     private val authVm: AuthViewModel by viewModels()
+    private val socialVm: SocialViewModel by viewModels() // Inyectar SocialViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -52,6 +54,11 @@ class MainActivity : ComponentActivity() {
                 )
                 
                 val isAdmin = authState.user?.role == "admin"
+
+                // Inicializar P2P con usuario actual
+                if (authState.user != null) {
+                    socialVm.setCurrentUser(authState.user!!.email)
+                }
 
                 Scaffold(
                     bottomBar = { 
@@ -95,8 +102,6 @@ class MainActivity : ComponentActivity() {
                             SocialHubScreen(
                                 currentUserEmail = authState.user?.email,
                                 onChatClick = { amigoId ->
-                                    // Navegar al chat, pasando el nombre temporalmente (se podría optimizar buscando el nombre)
-                                    // Por simplicidad, solo pasamos el ID y el chat cargará los datos
                                     nav.navigate(Routes.Chat.create(amigoId, "Chat"))
                                 }
                             )
@@ -205,7 +210,19 @@ class MainActivity : ComponentActivity() {
                                 onSumar = { p -> vm.agregar(p, +1) },
                                 onRestar = { p -> vm.agregar(p, -1) },
                                 onBack = { nav.popBackStack() },
-                                onCheckout = { nav.navigate(Routes.Checkout.route) }
+                                onCheckout = { nav.navigate(Routes.Checkout.route) },
+                                onCompartir = { nav.navigate(Routes.CompartirCarrito.route) }
+                            )
+                        }
+                        
+                        composable(Routes.CompartirCarrito.route) {
+                            CompartirCarritoScreen(
+                                marketUiState = ui,
+                                socialViewModel = socialVm, // Usar el viewModel inyectado
+                                onBack = { nav.popBackStack() },
+                                onCompartidoExitoso = {
+                                    nav.popBackStack() // Vuelve al carrito
+                                }
                             )
                         }
 
