@@ -6,10 +6,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -22,6 +19,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.huertohogar_mobil.ui.components.HuertoButton
+import com.example.huertohogar_mobil.ui.components.HuertoLoader
+import com.example.huertohogar_mobil.ui.components.HuertoTextField
+import com.example.huertohogar_mobil.ui.components.SectionHeader
 import com.example.huertohogar_mobil.viewmodel.AuthViewModel
 
 @Composable
@@ -48,24 +49,30 @@ fun RegistrarseScreen(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("Registrarse", style = MaterialTheme.typography.headlineMedium)
+        SectionHeader(title = "Registrarse")
         Spacer(modifier = Modifier.height(16.dp))
-        OutlinedTextField(
+        
+        HuertoTextField(
             value = name,
             onValueChange = { name = it },
-            label = { Text("Nombre") }
+            label = "Nombre"
         )
         Spacer(modifier = Modifier.height(8.dp))
-        OutlinedTextField(
+        HuertoTextField(
             value = email,
             onValueChange = { email = it },
-            label = { Text("Email") }
+            label = "Email"
         )
         Spacer(modifier = Modifier.height(8.dp))
-        OutlinedTextField(
+        HuertoTextField(
             value = password,
             onValueChange = { password = it },
-            label = { Text("Contraseña") }
+            label = "Contraseña",
+            // Note: Assuming HuertoTextField defaults to normal text, usually password needs visual transformation.
+            // For now we keep it simple as per the component definition, 
+            // or we might want to update HuertoTextField to accept visualTransformation parameter 
+            // (I added it in the definition previously).
+            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
         )
         Spacer(modifier = Modifier.height(16.dp))
         
@@ -75,11 +82,12 @@ fun RegistrarseScreen(
         }
 
         if (uiState.isLoading) {
-            CircularProgressIndicator()
+            HuertoLoader()
         } else {
-            Button(onClick = { viewModel.register(name, email, password) }) {
-                Text("Registrarse")
-            }
+            HuertoButton(
+                text = "Registrarse",
+                onClick = { viewModel.register(name, email, password) }
+            )
         }
     }
 }

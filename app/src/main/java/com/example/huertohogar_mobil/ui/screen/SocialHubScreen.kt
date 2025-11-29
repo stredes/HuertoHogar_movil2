@@ -1,24 +1,24 @@
 package com.example.huertohogar_mobil.ui.screen
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.filled.PersonAdd
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.huertohogar_mobil.model.User
+import com.example.huertohogar_mobil.ui.components.HuertoAvatar
+import com.example.huertohogar_mobil.ui.components.HuertoCard
+import com.example.huertohogar_mobil.ui.components.HuertoSearchField
+import com.example.huertohogar_mobil.ui.components.SectionHeader
 import com.example.huertohogar_mobil.viewmodel.SocialViewModel
 
 @Composable
@@ -39,23 +39,17 @@ fun SocialHubScreen(
     var query by remember { mutableStateOf("") }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text(
-            "Comunidad HuertoHogar",
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.primary
-        )
+        SectionHeader(title = "Comunidad HuertoHogar", centered = false)
         Spacer(modifier = Modifier.height(16.dp))
 
         // Buscador
-        OutlinedTextField(
-            value = query,
-            onValueChange = { 
+        HuertoSearchField(
+            query = query,
+            onQueryChange = { 
                 query = it
                 viewModel.buscarPersonas(it)
             },
-            label = { Text("Buscar personas...") },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-            modifier = Modifier.fillMaxWidth()
+            placeholder = "Buscar personas..."
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -86,27 +80,16 @@ fun SocialHubScreen(
 
 @Composable
 fun PersonaItem(user: User, isFriend: Boolean, onAction: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    HuertoCard(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
     ) {
         Row(
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Avatar simple con inicial
-            Surface(
-                modifier = Modifier.size(40.dp),
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primaryContainer
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = user.name.firstOrNull()?.toString() ?: "?",
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
+            HuertoAvatar(name = user.name)
+            
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(user.name, fontWeight = FontWeight.Bold)

@@ -10,10 +10,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -22,6 +20,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.huertohogar_mobil.R
+import com.example.huertohogar_mobil.ui.components.HuertoButton
+import com.example.huertohogar_mobil.ui.components.HuertoOutlinedButton
 
 @Composable
 fun InicioScreen(
@@ -35,9 +35,6 @@ fun InicioScreen(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Botón de Salir en la parte superior derecha (opcional) o abajo
-        // Para simplificar, lo pondremos al final
-        
         Image(
             painter = painterResource(id = R.drawable.icono),
             contentDescription = "Logo HuertoHogar",
@@ -56,16 +53,18 @@ fun InicioScreen(
             textAlign = TextAlign.Center
         )
         Spacer(modifier = Modifier.height(32.dp))
-        Button(onClick = onNavigateToProductos) {
-            Text("Ver Productos")
-        }
+        
+        HuertoButton(
+            text = "Ver Productos",
+            onClick = onNavigateToProductos
+        )
         
         Spacer(modifier = Modifier.height(16.dp))
         
-        OutlinedButton(onClick = onLogout) {
-            Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null)
-            Spacer(modifier = Modifier.size(8.dp))
-            Text("Cerrar Sesión")
-        }
+        HuertoOutlinedButton(
+            text = "Cerrar Sesión",
+            onClick = onLogout,
+            icon = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null) }
+        )
     }
 }

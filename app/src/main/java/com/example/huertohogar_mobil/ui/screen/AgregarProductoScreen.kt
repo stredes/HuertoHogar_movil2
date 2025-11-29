@@ -10,7 +10,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddPhotoAlternate
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,6 +21,10 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.example.huertohogar_mobil.model.Producto
+import com.example.huertohogar_mobil.ui.components.HuertoButton
+import com.example.huertohogar_mobil.ui.components.HuertoTextArea
+import com.example.huertohogar_mobil.ui.components.HuertoTextField
+import com.example.huertohogar_mobil.ui.components.HuertoTopBar
 import com.example.huertohogar_mobil.viewmodel.MarketViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -30,7 +33,6 @@ import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AgregarProductoScreen(
     viewModel: MarketViewModel = hiltViewModel(),
@@ -60,13 +62,10 @@ fun AgregarProductoScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(if (esEdicion) "Editar Producto" else "Agregar Producto") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
-                    }
-                }
+            HuertoTopBar(
+                title = if (esEdicion) "Editar Producto" else "Agregar Producto",
+                canNavigateBack = true,
+                onNavigateBack = onBack
             )
         }
     ) { padding ->
@@ -93,12 +92,11 @@ fun AgregarProductoScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
                     )
-                    Button(
+                    HuertoButton(
+                        text = "Cambiar",
                         onClick = { launcher.launch("image/*") },
-                        modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp)
-                    ) {
-                        Text("Cambiar")
-                    }
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp).width(100.dp).height(40.dp)
+                    )
                 } else if (productoEditar != null && productoEditar.imagenRes != 0) {
                     // Mostrar imagen de recurso si estamos editando y no hay URI
                     AsyncImage(
@@ -107,65 +105,59 @@ fun AgregarProductoScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
                     )
-                     Button(
+                     HuertoButton(
+                        text = "Cambiar",
                         onClick = { launcher.launch("image/*") },
-                        modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp)
-                    ) {
-                        Text("Cambiar")
-                    }
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp).width(100.dp).height(40.dp)
+                    )
                 } else {
-                    Button(onClick = { launcher.launch("image/*") }) {
-                        Icon(Icons.Default.AddPhotoAlternate, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Seleccionar Imagen")
-                    }
+                    HuertoButton(
+                        text = "Seleccionar Imagen",
+                        onClick = { launcher.launch("image/*") },
+                        icon = { Icon(Icons.Default.AddPhotoAlternate, contentDescription = null) }
+                    )
                 }
             }
 
-            OutlinedTextField(
+            HuertoTextField(
                 value = nombre,
                 onValueChange = { nombre = it },
-                label = { Text("Nombre del Producto") },
-                modifier = Modifier.fillMaxWidth()
+                label = "Nombre del Producto"
             )
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
+                HuertoTextField(
                     value = precio,
                     onValueChange = { if (it.all { char -> char.isDigit() }) precio = it },
-                    label = { Text("Precio (CLP)") },
+                    label = "Precio (CLP)",
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.weight(1f)
                 )
-                OutlinedTextField(
+                HuertoTextField(
                     value = unidad,
                     onValueChange = { unidad = it },
-                    label = { Text("Unidad (kg, unid)") },
+                    label = "Unidad (kg, unid)",
                     modifier = Modifier.weight(1f)
                 )
             }
 
-            OutlinedTextField(
+            HuertoTextArea(
                 value = descripcion,
                 onValueChange = { descripcion = it },
-                label = { Text("Descripción") },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 3
+                label = "Descripción"
             )
 
-            Button(
+            HuertoButton(
+                text = if (esEdicion) "Guardar Cambios" else "Guardar Producto",
+                enabled = nombre.isNotEmpty() && precio.isNotEmpty(),
                 onClick = {
                     if (nombre.isNotEmpty() && precio.isNotEmpty() && unidad.isNotEmpty()) {
                         scope.launch {
-                            // Solo copiamos si la URI cambió y no es null
-                            // Si es la misma que ya teníamos guardada (String), no necesitamos copiarla de nuevo
-                            // Pero como manejamos Uri objeto, comparamos:
                             val uriStringOriginal = productoEditar?.imagenUri
                             val uriActual = imagenUri
                             
                             var uriFinal: String? = uriStringOriginal
 
-                            // Si hay una nueva URI seleccionada que es distinta a la original
                             if (uriActual != null && uriActual.toString() != uriStringOriginal) {
                                 uriFinal = copiarImagenAMemoriaInterna(context, uriActual)
                             }
@@ -192,17 +184,12 @@ fun AgregarProductoScreen(
                             onBack()
                         }
                     }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = nombre.isNotEmpty() && precio.isNotEmpty()
-            ) {
-                Text(if (esEdicion) "Guardar Cambios" else "Guardar Producto")
-            }
+                }
+            )
         }
     }
 }
 
-// Función auxiliar para copiar la imagen
 suspend fun copiarImagenAMemoriaInterna(context: Context, uri: Uri): String? {
     return withContext(Dispatchers.IO) {
         try {

@@ -1,13 +1,10 @@
-// Pantalla detalle
 package com.example.huertohogar_mobil.ui.screen
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -18,15 +15,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
 import com.example.huertohogar_mobil.model.Producto
+import com.example.huertohogar_mobil.ui.components.HuertoButton
+import com.example.huertohogar_mobil.ui.components.HuertoOutlinedButton
+import com.example.huertohogar_mobil.ui.components.HuertoTopBar
+import com.example.huertohogar_mobil.ui.components.ProductImage
 import com.example.huertohogar_mobil.viewmodel.MarketUiState
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DetalleScreen(
     ui: MarketUiState,
@@ -40,13 +37,10 @@ fun DetalleScreen(
 ) {
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(producto.nombre, fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
-                    }
-                },
+            HuertoTopBar(
+                title = producto.nombre,
+                canNavigateBack = true,
+                onNavigateBack = onBack,
                 actions = {
                     BadgedBox(badge = {
                         if (ui.countCarrito > 0) Badge { Text("${ui.countCarrito}") }
@@ -63,33 +57,18 @@ fun DetalleScreen(
             Modifier
                 .padding(pv)
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState()) // Scrollable para pantallas pequeñas
+                .verticalScroll(rememberScrollState())
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
              // Visualización de la imagen (URI o Recurso)
-            Box(
+            ProductImage(
+                producto = producto,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(250.dp)
                     .clip(RoundedCornerShape(16.dp))
-            ) {
-                if (producto.imagenUri != null) {
-                    AsyncImage(
-                        model = producto.imagenUri,
-                        contentDescription = producto.nombre,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                } else if (producto.imagenRes != 0) {
-                    Image(
-                        painter = painterResource(producto.imagenRes),
-                        contentDescription = producto.nombre,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                }
-            }
+            )
 
             Text(producto.descripcion, style = MaterialTheme.typography.bodyLarge)
             
@@ -104,14 +83,11 @@ fun DetalleScreen(
 
             Spacer(Modifier.height(16.dp))
 
-            Button(
+            HuertoButton(
+                text = "Agregar al carrito",
                 onClick = onAgregar,
-                modifier = Modifier.fillMaxWidth().height(50.dp)
-            ) {
-                Icon(Icons.Filled.Add, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("Agregar al carrito")
-            }
+                icon = { Icon(Icons.Filled.Add, contentDescription = null) }
+            )
             
             // Sección Admin: Editar y Eliminar
             if (isAdmin) {
@@ -122,25 +98,20 @@ fun DetalleScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    OutlinedButton(
+                    // Wrap components manually for weight since HuertoOutlinedButton takes modifier
+                    HuertoOutlinedButton(
+                        text = "Editar",
                         onClick = onEditar,
                         modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary)
-                    ) {
-                        Icon(Icons.Filled.Edit, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Editar")
-                    }
+                        icon = { Icon(Icons.Filled.Edit, contentDescription = null) }
+                    )
                     
-                    OutlinedButton(
+                    HuertoOutlinedButton(
+                        text = "Eliminar",
                         onClick = onEliminar,
                         modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                    ) {
-                        Icon(Icons.Filled.Delete, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Eliminar")
-                    }
+                        icon = { Icon(Icons.Filled.Delete, contentDescription = null) }
+                    )
                 }
             }
         }

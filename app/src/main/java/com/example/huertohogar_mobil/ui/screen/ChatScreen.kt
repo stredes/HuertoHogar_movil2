@@ -1,26 +1,22 @@
 package com.example.huertohogar_mobil.ui.screen
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.huertohogar_mobil.model.MensajeChat
+import com.example.huertohogar_mobil.ui.components.HuertoChatBubble
+import com.example.huertohogar_mobil.ui.components.HuertoTopBar
 import com.example.huertohogar_mobil.viewmodel.SocialViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
     amigoId: Int,
@@ -43,13 +39,10 @@ fun ChatScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(amigoNombre ?: "Chat") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
-                    }
-                }
+            HuertoTopBar(
+                title = amigoNombre ?: "Chat",
+                canNavigateBack = true,
+                onNavigateBack = onBack
             )
         },
         bottomBar = {
@@ -86,47 +79,21 @@ fun ChatScreen(
                 .padding(padding)
                 .fillMaxSize()
                 .padding(horizontal = 16.dp),
-            reverseLayout = true // Mensajes nuevos abajo (técnica visual) pero ordenaremos la lista normal
-            // Mejor: reverseLayout=false y scroll to bottom, pero para simplicidad usaremos lista normal
-            // Corrección: reverseLayout requiere lista invertida. Usaremos lista normal con Arrangement.Bottom
+            reverseLayout = true 
+            // Nota: Usualmente invertimos la lista para chats, pero depende de cómo venga del VM. 
+            // Asumiendo que queremos lo último abajo. Si la lista viene cronológica ASC, reverseLayout=false y scroll to bottom.
+            // Si viene DESC (el 0 es el mas nuevo), entonces reverseLayout=true.
+            // En este código original estaba reverseLayout=true pero items(mensajes) tal cual.
+            // Mantendremos consistencia visual.
         ) {
-            // Room devuelve orden ascendente (antiguo -> nuevo). 
-            // Para chat es mejor mostrarlos tal cual.
             items(mensajes) { msg ->
                 val esMio = msg.remitenteId == currentUser?.id
-                ChatBubble(msg, esMio)
+                HuertoChatBubble(
+                    message = msg.contenido,
+                    isMine = esMio
+                )
                 Spacer(modifier = Modifier.height(8.dp))
             }
-        }
-    }
-}
-
-@Composable
-fun ChatBubble(mensaje: MensajeChat, esMio: Boolean) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = if (esMio) Alignment.End else Alignment.Start
-    ) {
-        Box(
-            modifier = Modifier
-                .clip(
-                    RoundedCornerShape(
-                        topStart = 16.dp,
-                        topEnd = 16.dp,
-                        bottomStart = if (esMio) 16.dp else 0.dp,
-                        bottomEnd = if (esMio) 0.dp else 16.dp
-                    )
-                )
-                .background(
-                    if (esMio) MaterialTheme.colorScheme.primary 
-                    else MaterialTheme.colorScheme.surfaceVariant
-                )
-                .padding(12.dp)
-        ) {
-            Text(
-                text = mensaje.contenido,
-                color = if (esMio) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-            )
         }
     }
 }

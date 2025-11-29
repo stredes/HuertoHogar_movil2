@@ -5,13 +5,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -22,6 +17,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.huertohogar_mobil.ui.components.HuertoButton
+import com.example.huertohogar_mobil.ui.components.HuertoTextArea
+import com.example.huertohogar_mobil.ui.components.HuertoTextField
+import com.example.huertohogar_mobil.ui.components.SectionHeader
 import com.example.huertohogar_mobil.viewmodel.MarketViewModel
 
 @Composable
@@ -40,44 +39,35 @@ fun ContactoScreen(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            text = "Contáctanos",
-            style = MaterialTheme.typography.headlineMedium
-        )
-        Text(
-            text = "¿Tienes dudas? Escríbenos y te responderemos.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.secondary
+        SectionHeader(
+            title = "Contáctanos",
+            subtitle = "¿Tienes dudas? Escríbenos y te responderemos."
         )
         
         Spacer(modifier = Modifier.height(24.dp))
         
-        OutlinedTextField(
+        HuertoTextField(
             value = name,
             onValueChange = { name = it },
-            label = { Text("Nombre") },
-            modifier = Modifier.fillMaxWidth()
+            label = "Nombre"
         )
         Spacer(modifier = Modifier.height(12.dp))
-        OutlinedTextField(
+        HuertoTextField(
             value = email,
             onValueChange = { email = it },
-            label = { Text("Email") },
-            modifier = Modifier.fillMaxWidth()
+            label = "Email"
         )
         Spacer(modifier = Modifier.height(12.dp))
-        OutlinedTextField(
+        HuertoTextArea(
             value = message,
             onValueChange = { message = it },
-            label = { Text("Mensaje") },
-            maxLines = 5,
-            modifier = Modifier
-                .height(150.dp)
-                .fillMaxWidth()
+            label = "Mensaje",
+            modifier = Modifier.height(150.dp)
         )
         Spacer(modifier = Modifier.height(24.dp))
         
-        Button(
+        HuertoButton(
+            text = "Enviar Mensaje",
             onClick = { 
                 if (name.isNotBlank() && email.isNotBlank() && message.isNotBlank()) {
                     viewModel.enviarContacto(name, email, message)
@@ -89,10 +79,7 @@ fun ContactoScreen(
                 } else {
                     Toast.makeText(context, "Por favor completa todos los campos", Toast.LENGTH_SHORT).show()
                 }
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Enviar Mensaje")
-        }
+            }
+        )
     }
 }

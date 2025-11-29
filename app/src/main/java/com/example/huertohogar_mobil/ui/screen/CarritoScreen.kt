@@ -1,11 +1,9 @@
-// Pantalla carrito
 package com.example.huertohogar_mobil.ui.screen
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -14,9 +12,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.huertohogar_mobil.model.Producto
+import com.example.huertohogar_mobil.ui.components.CartItemRow
+import com.example.huertohogar_mobil.ui.components.HuertoButton
+import com.example.huertohogar_mobil.ui.components.HuertoTopBar
 import com.example.huertohogar_mobil.viewmodel.MarketUiState
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CarritoScreen(
     ui: MarketUiState,
@@ -27,13 +27,10 @@ fun CarritoScreen(
 ) {
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Carrito", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
-                    }
-                }
+            HuertoTopBar(
+                title = "Carrito",
+                canNavigateBack = true,
+                onNavigateBack = onBack
             )
         },
         bottomBar = {
@@ -45,9 +42,14 @@ fun CarritoScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text("Total: ${formatoCLP(ui.totalCLP)}", fontWeight = FontWeight.Bold)
-                        Button(onClick = onCheckout) {
-                            Icon(Icons.Filled.Add, contentDescription = null)
-                            Spacer(Modifier.width(6.dp)); Text("Continuar")
+                        
+                        // Using HuertoButton instead of raw Button
+                        Box(modifier = Modifier.width(150.dp)) {
+                            HuertoButton(
+                                text = "Continuar",
+                                onClick = onCheckout,
+                                icon = { Icon(Icons.Filled.Add, contentDescription = null) }
+                            )
                         }
                     }
                 }
@@ -59,7 +61,6 @@ fun CarritoScreen(
                 Text("Tu carrito está vacío")
             }
         } else {
-            // Mapeamos id->qty a objetos Producto
             val lineas = ui.carrito.mapNotNull { (id, qty) ->
                 ui.productos.firstOrNull { it.id == id }?.let { it to qty }
             }
@@ -68,21 +69,12 @@ fun CarritoScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(lineas, key = { it.first.id }) { (p, qty) ->
-                    Card {
-                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text(p.nombre, fontWeight = FontWeight.SemiBold)
-                                Text("${formatoCLP(p.precioCLP)} / ${p.unidad}")
-                            }
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                TextButton(onClick = { onRestar(p) }) { Text("−") }
-                                Text("$qty", modifier = Modifier.width(28.dp))
-                                IconButton(onClick = { onSumar(p) }) {
-                                    Icon(Icons.Filled.Add, contentDescription = "Más")
-                                }
-                            }
-                        }
-                    }
+                    CartItemRow(
+                        producto = p,
+                        cantidad = qty,
+                        onSumar = { onSumar(p) },
+                        onRestar = { onRestar(p) }
+                    )
                 }
             }
         }

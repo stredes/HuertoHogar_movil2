@@ -1,11 +1,9 @@
 package com.example.huertohogar_mobil.ui.screen
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Email
@@ -21,9 +19,10 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.huertohogar_mobil.model.MensajeContacto
+import com.example.huertohogar_mobil.ui.components.HuertoCard
+import com.example.huertohogar_mobil.ui.components.HuertoTopBar
 import com.example.huertohogar_mobil.viewmodel.AdminViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminNotificacionesScreen(
     viewModel: AdminViewModel = hiltViewModel(),
@@ -33,13 +32,10 @@ fun AdminNotificacionesScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Mensajes de Contacto") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
-                    }
-                }
+            HuertoTopBar(
+                title = "Mensajes de Contacto",
+                canNavigateBack = true,
+                onNavigateBack = onBack
             )
         }
     ) { padding ->
@@ -77,9 +73,8 @@ fun MensajeCard(
     else 
         MaterialTheme.colorScheme.surfaceVariant
 
-    Card(
-        colors = CardDefaults.cardColors(containerColor = cardColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    HuertoCard(
+        colors = CardDefaults.cardColors(containerColor = cardColor)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

@@ -1,7 +1,5 @@
 package com.example.huertohogar_mobil.ui.components
 
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -11,13 +9,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
 import com.example.huertohogar_mobil.model.Producto
 import com.example.huertohogar_mobil.ui.screen.formatoCLP
 
@@ -27,10 +22,9 @@ fun ProductoCard(
     onClick: () -> Unit,
     onAgregar: () -> Unit
 ) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
+    HuertoCard(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             Modifier.padding(12.dp),
@@ -38,27 +32,13 @@ fun ProductoCard(
         ) {
             val shape = RoundedCornerShape(12.dp)
             
-            // Lógica de visualización de imagen: Prioridad URI > Resource
-            Box(modifier = Modifier.size(64.dp).clip(shape)) {
-                if (p.imagenUri != null) {
-                    AsyncImage(
-                        model = p.imagenUri,
-                        contentDescription = p.nombre,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                } else {
-                    // Fallback a recurso local o placeholder si es 0
-                    if (p.imagenRes != 0) {
-                        Image(
-                            painter = painterResource(p.imagenRes),
-                            contentDescription = p.nombre,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-                }
-            }
+            // Usamos el componente ProductImage abstracto
+            ProductImage(
+                producto = p,
+                modifier = Modifier
+                    .size(64.dp)
+                    .clip(shape)
+            )
 
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {

@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -18,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.example.huertohogar_mobil.ui.components.HuertoButton
 
 @Composable
 fun FinPagoScreen(onVolverAlInicio: () -> Unit) {
@@ -47,8 +47,10 @@ fun FinPagoScreen(onVolverAlInicio: () -> Unit) {
             textAlign = TextAlign.Center
         )
         Spacer(modifier = Modifier.height(32.dp))
-        Button(onClick = onVolverAlInicio) {
-            Text("Volver al Inicio")
-        }
+        
+        HuertoButton(
+            text = "Volver al Inicio",
+            onClick = onVolverAlInicio
+        )
     }
 }

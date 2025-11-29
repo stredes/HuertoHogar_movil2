@@ -8,13 +8,13 @@ import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.huertohogar_mobil.model.Producto
+import com.example.huertohogar_mobil.ui.components.HuertoSearchField
+import com.example.huertohogar_mobil.ui.components.HuertoTopBar
 import com.example.huertohogar_mobil.ui.components.ProductoCard
 import com.example.huertohogar_mobil.viewmodel.MarketUiState
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CatalogoScreen(
     ui: MarketUiState,
@@ -25,8 +25,8 @@ fun CatalogoScreen(
 ) {
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("HuertoHogar", fontWeight = FontWeight.Bold) },
+            HuertoTopBar(
+                title = "HuertoHogar",
                 actions = {
                     BadgedBox(badge = {
                         if (ui.countCarrito > 0) Badge { Text("${ui.countCarrito}") }
@@ -41,20 +41,21 @@ fun CatalogoScreen(
     ) { pv ->
         Column(Modifier.padding(pv)) {
             var query by remember { mutableStateOf(ui.query) }
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it; onBuscar(it) },
-                label = { Text("Buscar producto...") },
-                singleLine = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp)
-            )
+            
+            Box(modifier = Modifier.padding(12.dp)) {
+                HuertoSearchField(
+                    query = query,
+                    onQueryChange = { query = it; onBuscar(it) },
+                    placeholder = "Buscar producto..."
+                )
+            }
+            
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .padding(horizontal = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(bottom = 12.dp)
             ) {
                 items(ui.productosFiltrados, key = { it.id }) { p ->
                     ProductoCard(

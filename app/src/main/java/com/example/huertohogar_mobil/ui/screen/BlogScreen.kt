@@ -16,11 +16,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.CalendarToday
-import androidx.compose.material.icons.filled.LocalFlorist
 import androidx.compose.material.icons.filled.Eco
+import androidx.compose.material.icons.filled.LocalFlorist
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material.icons.filled.WbSunny
-import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -37,6 +36,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.huertohogar_mobil.ui.components.HuertoCard
+import com.example.huertohogar_mobil.ui.components.SectionHeader
 
 data class BlogPost(
     val id: Int,
@@ -139,20 +140,12 @@ fun BlogScreen() {
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            Column {
-                Text(
-                    text = "Blog HuertoHogar",
-                    style = MaterialTheme.typography.headlineLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "Consejos verdes para tu vida diaria",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.secondary
-                )
-            }
-            Spacer(modifier = Modifier.height(24.dp))
+            SectionHeader(
+                title = "Blog HuertoHogar",
+                subtitle = "Consejos verdes para tu vida diaria",
+                centered = false
+            )
+            Spacer(modifier = Modifier.height(8.dp))
         }
         items(blogPosts) { post ->
             BlogPostCard(post)
@@ -164,16 +157,15 @@ fun BlogScreen() {
 fun BlogPostCard(post: BlogPost) {
     var expanded by remember { mutableStateOf(false) }
 
-    Card(
+    HuertoCard(
         modifier = Modifier
             .fillMaxWidth()
-            .animateContentSize(), // Animación suave al expandir
+            .animateContentSize(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        onClick = { expanded = !expanded }
     ) {
         Column(
             modifier = Modifier
-                .clickable { expanded = !expanded }
                 .padding(16.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {

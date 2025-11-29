@@ -1,17 +1,16 @@
 package com.example.huertohogar_mobil.ui.screen
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.huertohogar_mobil.model.Producto
+import com.example.huertohogar_mobil.ui.components.HuertoButton
+import com.example.huertohogar_mobil.ui.components.HuertoTopBar
 import com.example.huertohogar_mobil.viewmodel.MarketUiState
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CheckoutScreen(
     ui: MarketUiState,
@@ -20,13 +19,10 @@ fun CheckoutScreen(
 ) {
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Checkout", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
-                    }
-                }
+            HuertoTopBar(
+                title = "Checkout",
+                canNavigateBack = true,
+                onNavigateBack = onBack
             )
         }
     ) { pv ->
@@ -42,7 +38,11 @@ fun CheckoutScreen(
             Divider()
             Text("Total: ${formatoCLP(ui.totalCLP)}", fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
-            Button(onClick = onFinalizar) { Text("Finalizar compra") }
+            
+            HuertoButton(
+                text = "Finalizar compra",
+                onClick = onFinalizar
+            )
         }
     }
 }
