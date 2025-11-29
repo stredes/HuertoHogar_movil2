@@ -21,7 +21,7 @@ fun HuertoTopBar(
         },
         navigationIcon = {
             if (canNavigateBack) {
-                IconButton(onClick = onNavigateBack) {
+                HuertoIconButton(onClick = onNavigateBack) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
                 }
             }

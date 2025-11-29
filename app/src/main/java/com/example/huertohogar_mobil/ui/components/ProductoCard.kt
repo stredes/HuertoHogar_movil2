@@ -46,7 +46,7 @@ fun ProductoCard(
                 Text(p.descripcion, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
                 Text("${formatoCLP(p.precioCLP)} / ${p.unidad}", style = MaterialTheme.typography.labelLarge)
             }
-            IconButton(onClick = onAgregar) {
+            HuertoIconButton(onClick = onAgregar) {
                 Icon(Icons.Filled.Add, contentDescription = "Agregar")
             }
         }

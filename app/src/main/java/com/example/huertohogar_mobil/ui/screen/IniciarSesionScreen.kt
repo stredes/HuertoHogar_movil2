@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -24,6 +23,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.huertohogar_mobil.ui.components.HuertoButton
 import com.example.huertohogar_mobil.ui.components.HuertoLoader
 import com.example.huertohogar_mobil.ui.components.HuertoTextField
+import com.example.huertohogar_mobil.ui.components.HuertoTextButton
 import com.example.huertohogar_mobil.viewmodel.AuthViewModel
 
 @Composable
@@ -86,9 +86,10 @@ fun IniciarSesionScreen(
             
             Spacer(modifier = Modifier.height(16.dp))
             
-            TextButton(onClick = onIrARegistro) {
-                Text("¿No tienes cuenta? Regístrate aquí")
-            }
+            HuertoTextButton(
+                text = "¿No tienes cuenta? Regístrate aquí",
+                onClick = onIrARegistro
+            )
         }
     }
 }

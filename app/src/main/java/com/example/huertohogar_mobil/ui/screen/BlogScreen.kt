@@ -22,7 +22,6 @@ import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -37,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.huertohogar_mobil.ui.components.HuertoCard
+import com.example.huertohogar_mobil.ui.components.HuertoIconButton
 import com.example.huertohogar_mobil.ui.components.SectionHeader
 
 data class BlogPost(
@@ -188,7 +188,7 @@ fun BlogPostCard(post: BlogPost) {
                         color = MaterialTheme.colorScheme.outline
                     )
                 }
-                IconButton(onClick = { expanded = !expanded }) {
+                HuertoIconButton(onClick = { expanded = !expanded }) {
                     Icon(
                         imageVector = if (expanded) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
                         contentDescription = if (expanded) "Colapsar" else "Expandir"

@@ -34,7 +34,11 @@ fun CartItemRow(
                 )
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onRestar) { Text("−", style = MaterialTheme.typography.titleLarge) }
+                HuertoTextButton(
+                    text = "−",
+                    onClick = onRestar,
+                    textStyle = MaterialTheme.typography.titleLarge
+                )
                 Text("$cantidad", modifier = Modifier.width(28.dp), style = MaterialTheme.typography.bodyLarge)
                 IconButton(onClick = onSumar) {
                     Icon(Icons.Filled.Add, contentDescription = "Más")

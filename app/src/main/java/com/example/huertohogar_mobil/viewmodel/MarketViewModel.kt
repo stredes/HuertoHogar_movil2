@@ -76,10 +76,13 @@ class MarketViewModel @Inject constructor(
         if (delta == 0) return
         
         viewModelScope.launch {
-            val actualQty = _ui.value.carrito[p.id] ?: 0
+            // LEER desde la base de datos, no desde la UI, para evitar race conditions
+            val currentItem = carritoDao.getItem(p.id)
+            val actualQty = currentItem?.cantidad ?: 0
+            
             val nuevoQty = (actualQty + delta).coerceAtLeast(0)
             
-            Log.d(TAG, "🛒 Modificando carrito: ${p.nombre} -> Cantidad: $nuevoQty")
+            Log.d(TAG, "🛒 Modificando carrito (BD): ${p.nombre} -> Anterior: $actualQty, Nueva: $nuevoQty")
 
             if (nuevoQty > 0) {
                 carritoDao.insertItem(CarritoItem(p.id, nuevoQty))

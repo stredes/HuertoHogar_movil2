@@ -20,6 +20,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.huertohogar_mobil.model.MensajeContacto
 import com.example.huertohogar_mobil.ui.components.HuertoCard
+import com.example.huertohogar_mobil.ui.components.HuertoIconButton
+import com.example.huertohogar_mobil.ui.components.HuertoTextButton
 import com.example.huertohogar_mobil.ui.components.HuertoTopBar
 import com.example.huertohogar_mobil.viewmodel.AdminViewModel
 
@@ -97,17 +99,19 @@ fun MensajeCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
             ) {
-                TextButton(onClick = onToggle) {
-                    Icon(
-                        imageVector = if(mensaje.respondido) Icons.Filled.CheckCircle else Icons.Outlined.CheckCircle,
-                        contentDescription = null,
-                        tint = if(mensaje.respondido) Color.Green else Color.Gray
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(if (mensaje.respondido) "Respondido" else "Marcar Respondido")
-                }
+                HuertoTextButton(
+                    text = if (mensaje.respondido) "Respondido" else "Marcar Respondido",
+                    onClick = onToggle,
+                    icon = {
+                        Icon(
+                            imageVector = if(mensaje.respondido) Icons.Filled.CheckCircle else Icons.Outlined.CheckCircle,
+                            contentDescription = null,
+                            tint = if(mensaje.respondido) Color.Green else Color.Gray
+                        )
+                    }
+                )
                 Spacer(modifier = Modifier.width(8.dp))
-                IconButton(onClick = onDelete) {
+                HuertoIconButton(onClick = onDelete) {
                     Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = MaterialTheme.colorScheme.error)
                 }
             }

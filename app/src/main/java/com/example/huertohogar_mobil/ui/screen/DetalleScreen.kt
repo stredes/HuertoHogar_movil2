@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.huertohogar_mobil.model.Producto
 import com.example.huertohogar_mobil.ui.components.HuertoButton
+import com.example.huertohogar_mobil.ui.components.HuertoIconButton
 import com.example.huertohogar_mobil.ui.components.HuertoOutlinedButton
 import com.example.huertohogar_mobil.ui.components.HuertoTopBar
 import com.example.huertohogar_mobil.ui.components.ProductImage
@@ -45,7 +46,7 @@ fun DetalleScreen(
                     BadgedBox(badge = {
                         if (ui.countCarrito > 0) Badge { Text("${ui.countCarrito}") }
                     }) {
-                        IconButton(onClick = irCarrito) {
+                        HuertoIconButton(onClick = irCarrito) {
                             Icon(Icons.Filled.ShoppingCart, contentDescription = "Carrito")
                         }
                     }

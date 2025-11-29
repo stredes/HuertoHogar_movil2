@@ -10,6 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.huertohogar_mobil.model.Producto
+import com.example.huertohogar_mobil.ui.components.HuertoIconButton
 import com.example.huertohogar_mobil.ui.components.HuertoSearchField
 import com.example.huertohogar_mobil.ui.components.HuertoTopBar
 import com.example.huertohogar_mobil.ui.components.ProductoCard
@@ -31,7 +32,7 @@ fun CatalogoScreen(
                     BadgedBox(badge = {
                         if (ui.countCarrito > 0) Badge { Text("${ui.countCarrito}") }
                     }) {
-                        IconButton(onClick = irCarrito) {
+                        HuertoIconButton(onClick = irCarrito) {
                             Icon(Icons.Filled.ShoppingCart, contentDescription = "Carrito")
                         }
                     }

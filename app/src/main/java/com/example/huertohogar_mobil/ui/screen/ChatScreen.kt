@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.huertohogar_mobil.ui.components.HuertoChatBubble
+import com.example.huertohogar_mobil.ui.components.HuertoIconButton
 import com.example.huertohogar_mobil.ui.components.HuertoTextField
 import com.example.huertohogar_mobil.ui.components.HuertoTopBar
 import com.example.huertohogar_mobil.viewmodel.SocialViewModel
@@ -61,14 +62,14 @@ fun ChatScreen(
                     shape = RoundedCornerShape(24.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                IconButton(
+                HuertoIconButton(
                     onClick = {
                         if (texto.isNotBlank()) {
                             viewModel.enviarMensaje(amigoId, texto)
                             texto = ""
                         }
                     },
-                    colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    filled = true
                 ) {
                     Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Enviar")
                 }
@@ -81,14 +82,13 @@ fun ChatScreen(
                 .fillMaxSize()
                 .padding(horizontal = 16.dp),
             reverseLayout = true 
-            // Nota: Usualmente invertimos la lista para chats, pero depende de cómo venga del VM. 
-            // Asumiendo que queremos lo último abajo.
         ) {
-            items(mensajes) { msg ->
+            items(mensajes.reversed()) { msg -> // Revertimos si vienen en orden cronológico
                 val esMio = msg.remitenteId == currentUser?.id
                 HuertoChatBubble(
                     message = msg.contenido,
-                    isMine = esMio
+                    isMine = esMio,
+                    estado = msg.estado // Pasamos el estado del mensaje
                 )
                 Spacer(modifier = Modifier.height(8.dp))
             }

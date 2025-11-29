@@ -11,7 +11,6 @@ interface SocialDao {
 
     // --- AMIGOS ---
 
-    // Obtener la lista de amigos de un usuario (uniendo con la tabla de usuarios para obtener nombres)
     @Query("""
         SELECT u.* FROM users u
         INNER JOIN amistades a ON u.id = a.amigoId
@@ -19,7 +18,6 @@ interface SocialDao {
     """)
     fun getAmigos(miId: Int): Flow<List<User>>
 
-    // Buscar usuarios que NO son mis amigos (para agregar)
     @Query("""
         SELECT * FROM users 
         WHERE id != :miId 
@@ -33,7 +31,6 @@ interface SocialDao {
 
     // --- CHAT ---
 
-    // Obtener conversación entre dos usuarios
     @Query("""
         SELECT * FROM mensajes_chat 
         WHERE (remitenteId = :yoId AND destinatarioId = :otroId) 
@@ -43,5 +40,8 @@ interface SocialDao {
     fun getConversacion(yoId: Int, otroId: Int): Flow<List<MensajeChat>>
 
     @Insert
-    suspend fun enviarMensaje(mensaje: MensajeChat)
+    suspend fun insertMensaje(mensaje: MensajeChat): Long
+
+    @Query("UPDATE mensajes_chat SET estado = :nuevoEstado WHERE id = :mensajeId")
+    suspend fun updateEstado(mensajeId: Long, nuevoEstado: Int)
 }

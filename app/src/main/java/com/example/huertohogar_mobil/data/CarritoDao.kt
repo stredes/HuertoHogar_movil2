@@ -9,6 +9,9 @@ interface CarritoDao {
     @Query("SELECT * FROM carrito_items")
     fun getCarrito(): Flow<List<CarritoItem>>
 
+    @Query("SELECT * FROM carrito_items WHERE productoId = :productoId")
+    suspend fun getItem(productoId: String): CarritoItem?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertItem(item: CarritoItem)
 

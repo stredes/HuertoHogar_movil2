@@ -40,4 +40,7 @@ object DatabaseModule {
 
     @Provides
     fun provideSocialDao(database: AppDatabase): SocialDao = database.socialDao()
+
+    @Provides
+    fun provideSolicitudDao(database: AppDatabase): SolicitudDao = database.solicitudDao()
 }
