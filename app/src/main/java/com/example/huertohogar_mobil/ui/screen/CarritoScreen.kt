@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -75,9 +76,13 @@ fun CarritoScreen(
                 Text("Tu carrito está vacío")
             }
         } else {
-            val lineas = ui.carrito.mapNotNull { (id, qty) ->
-                ui.productos.firstOrNull { it.id == id }?.let { it to qty }
+            // Ordenamos la lista por nombre para evitar saltos visuales al actualizar cantidades
+            val lineas = remember(ui.carrito, ui.productos) {
+                ui.carrito.mapNotNull { (id, qty) ->
+                    ui.productos.firstOrNull { it.id == id }?.let { it to qty }
+                }.sortedBy { it.first.nombre }
             }
+
             LazyColumn(
                 Modifier.padding(pv).fillMaxSize().padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
