@@ -16,14 +16,15 @@ import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -32,7 +33,7 @@ import com.example.huertohogar_mobil.ui.components.HuertoChatBubble
 import com.example.huertohogar_mobil.ui.components.HuertoIconButton
 import com.example.huertohogar_mobil.ui.components.HuertoTextField
 import com.example.huertohogar_mobil.viewmodel.SocialViewModel
-import com.example.huertohogar_mobil.model.TipoContenido
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,8 +44,6 @@ fun ChatScreen(
     viewModel: SocialViewModel = hiltViewModel(),
     onBack: () -> Unit
 ) {
-    val context = LocalContext.current
-    
     LaunchedEffect(Unit) {
         if (currentUserEmail != null) {
             viewModel.setCurrentUser(currentUserEmail)
@@ -57,14 +56,32 @@ fun ChatScreen(
     val connectedPeers by viewModel.connectedPeers.collectAsStateWithLifecycle()
     val amigos by viewModel.amigos.collectAsStateWithLifecycle()
     
-    // Buscar si el amigo está conectado
+    // Recogemos el nuevo estado de conexión de Firebase
+    val isFriendOnline by viewModel.chatFriendStatus.collectAsStateWithLifecycle()
+
+    // Buscar si el amigo está conectado localmente
     val amigo = amigos.find { it.id == amigoId }
-    val isConnected = amigo != null && connectedPeers.contains(amigo.email)
+    val isConnectedLocally = amigo != null && connectedPeers.contains(amigo.email)
+    
+    // El amigo está "disponible" si está online en Firebase O conectado localmente
+    val isAvailable = isFriendOnline || isConnectedLocally
 
     var texto by remember { mutableStateOf("") }
     var showAttachments by remember { mutableStateOf(false) }
 
-    // Launcher para seleccionar imagen
+    var isRefreshing by remember { mutableStateOf(false) }
+    
+    if (isRefreshing) {
+        LaunchedEffect(Unit) {
+            if (amigo != null) {
+                viewModel.solicitarSincronizacionManual(amigo.email)
+                viewModel.cargarChat(amigoId)
+            }
+            delay(1500)
+            isRefreshing = false
+        }
+    }
+
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -74,7 +91,6 @@ fun ChatScreen(
         showAttachments = false
     }
 
-    // Launcher para seleccionar video
     val videoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -84,7 +100,6 @@ fun ChatScreen(
         showAttachments = false
     }
     
-    // Launcher para seleccionar audio
     val audioPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -101,18 +116,22 @@ fun ChatScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(text = amigoNombre ?: "Chat", fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.width(8.dp))
-                        // Indicador de estado (punto verde/rojo)
                         Box(
                             modifier = Modifier
                                 .size(10.dp)
                                 .clip(CircleShape)
-                                .background(if (isConnected) Color.Green else Color.Red)
+                                .background(if (isAvailable) Color.Green else Color.Red)
                         )
                     }
                 },
                 navigationIcon = {
                     HuertoIconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { isRefreshing = true }) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Actualizar conexión y mensajes")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -162,7 +181,6 @@ fun ChatScreen(
                             text = { Text("Ubicación") },
                             leadingIcon = { Icon(Icons.Default.LocationOn, contentDescription = null) },
                             onClick = { 
-                                // Simulación de ubicación actual
                                 viewModel.adjuntarUbicacion(-33.4489, -70.6693, amigoId)
                                 showAttachments = false
                             }
@@ -192,22 +210,29 @@ fun ChatScreen(
             }
         }
     ) { padding ->
-        LazyColumn(
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = { isRefreshing = true },
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                .padding(horizontal = 16.dp),
-            reverseLayout = true 
         ) {
-            items(mensajes.reversed()) { msg -> 
-                val esMio = msg.remitenteId == currentUser?.id
-                HuertoChatBubble(
-                    message = msg.contenido,
-                    isMine = esMio,
-                    estado = msg.estado,
-                    tipoContenido = msg.tipoContenido
-                )
-                Spacer(modifier = Modifier.height(8.dp))
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp),
+                reverseLayout = true 
+            ) {
+                items(mensajes.reversed()) { msg -> 
+                    val esMio = msg.remitenteId == currentUser?.id
+                    HuertoChatBubble(
+                        message = msg.contenido,
+                        isMine = esMio,
+                        estado = msg.estado,
+                        tipoContenido = msg.tipoContenido
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
             }
         }
     }

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "44710382716",
+    "project_id": "huertomobil-17e85",
+    "storage_bucket": "huertomobil-17e85.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:44710382716:android:16aa9f6398a0b9b0264df9",
+        "android_client_info": {
+          "package_name": "com.example.huertohogar_mobil"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC_tMtsINQCna3fSKWKYQJyTSjdrsDNNl4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

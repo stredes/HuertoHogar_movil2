@@ -102,12 +102,32 @@ class P2pManager @Inject constructor(
     }
 
     fun pause() {
+        // No hacer nada en pause para mantener el servicio activo en segundo plano
+        // si se desea que la conexión persista al salir del chat.
+        // Opcionalmente, se puede mantener el Discovery activo pero detener la publicación,
+        // o mantener ambos.
+        // Si el usuario quiere que al cerrar el chat la conexión se pierda, entonces
+        // aquí se deben liberar recursos. Pero el usuario dice "una vez se cierra el chat la conexion se pierde",
+        // lo cual implica que quiere que NO se pierda o que al volver se recupere.
+        // El usuario dice "al hacer refresh la conexion tampoco vuelve".
+        // Esto sugiere que al volver a entrar o al refrescar, el Discovery no se reinicia correctamente.
+        
+        // Comentamos la detención de servicios en pause para mantener la conexión viva
+        // mientras la app esté en memoria. O mejor, manejamos el ciclo de vida en el ViewModel/Activity principal
+        // y no por pantalla.
+        
+        // Sin embargo, si la llamada a pause() viene de onStop() de la Activity principal, 
+        // entonces sí tiene sentido liberar recursos para no gastar batería.
+        // Pero si el refresh no funciona, es porque al llamar a resume() algo falla o no limpia el estado anterior.
+        
         try {
+            // Liberamos el lock pero mantenemos el servicio si es posible, o limpiamos todo bien.
             multicastLock?.takeIf { it.isHeld }?.release()
-            discoveryListener?.let { nsdManager?.stopServiceDiscovery(it) }
-            registrationListener?.let { nsdManager?.unregisterService(it) }
-            discoveryListener = null
-            registrationListener = null
+            
+            // Detener descubrimiento y registro limpiamente
+            stopDiscoveryInternal()
+            stopRegistrationInternal()
+            
         } catch (e: Exception) {
             Log.e(TAG, "Error al pausar P2P", e)
         }
@@ -118,12 +138,27 @@ class P2pManager @Inject constructor(
         CoroutineScope(Dispatchers.Main).launch {
             try {
                 multicastLock?.takeIf { !it.isHeld }?.acquire()
+                // Reiniciar servicios si no están activos
                 if (registrationListener == null) registerService(localPort)
                 if (discoveryListener == null) startDiscovery()
             } catch (e: Exception) {
                 Log.e(TAG, "Error al reanudar P2P", e)
             }
         }
+    }
+    
+    private fun stopDiscoveryInternal() {
+        discoveryListener?.let { 
+            try { nsdManager?.stopServiceDiscovery(it) } catch(e: Exception) { Log.e(TAG, "Error stopping discovery", e) }
+        }
+        discoveryListener = null
+    }
+
+    private fun stopRegistrationInternal() {
+        registrationListener?.let { 
+            try { nsdManager?.unregisterService(it) } catch(e: Exception) { Log.e(TAG, "Error unregistering service", e) }
+        }
+        registrationListener = null
     }
 
     private fun startServer() {
@@ -676,6 +711,29 @@ class P2pManager @Inject constructor(
                      type = "SYNC_REQUEST"
                  )
              }
+        }
+    }
+
+    fun restartDiscovery() {
+        CoroutineScope(Dispatchers.Main).launch {
+            try {
+                // 1. Detener el descubrimiento actual de forma segura
+                discoveryListener?.let { 
+                    try { nsdManager?.stopServiceDiscovery(it) } catch(e: Exception) { Log.e(TAG, "Stop discovery error", e) }
+                }
+                discoveryListener = null
+                
+                // 2. Limpiar cache local de usuarios
+                discoveredUsers.clear()
+                discoveredServicesPorts.clear()
+                updateConnectedPeers()
+                
+                // 3. Reiniciar el descubrimiento
+                startDiscovery()
+                Log.d(TAG, "🔄 Discovery reiniciado manualmente")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error reiniciando descubrimiento", e)
+            }
         }
     }
 }

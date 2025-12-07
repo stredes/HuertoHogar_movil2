@@ -22,14 +22,16 @@ class RoomProductoRepository @Inject constructor(
     }
 
     override suspend fun ensureSeeded() {
-        val count = productoDao.getCount()
-        Log.d(TAG, "Verificando Seed. Productos actuales en DB: $count")
-        if (count == 0) {
-            Log.d(TAG, "BD vacía. Insertando ${SeedData.productos.size} productos iniciales...")
+        // Siempre actualizamos los productos semilla al iniciar.
+        // Esto es CRÍTICO porque guardamos 'imagenRes' (Int) en la base de datos.
+        // Los IDs de recursos de Android cambian cada vez que se compila la app (R.drawable.xxx).
+        // Si no actualizamos, la BD tendrá IDs viejos que apuntan a recursos incorrectos o inexistentes.
+        Log.d(TAG, "Actualizando productos semilla para asegurar IDs de recursos correctos...")
+        try {
             productoDao.insertAll(SeedData.productos)
-            Log.d(TAG, "Seed completado exitosamente.")
-        } else {
-            Log.d(TAG, "BD ya tiene datos. Saltando Seed.")
+            Log.d(TAG, "Seed data actualizado correctamente.")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error actualizando seed data", e)
         }
     }
 

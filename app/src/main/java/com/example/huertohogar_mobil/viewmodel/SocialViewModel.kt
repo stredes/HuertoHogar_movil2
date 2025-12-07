@@ -3,6 +3,7 @@ package com.example.huertohogar_mobil.viewmodel
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.huertohogar_mobil.data.FirebaseRepository
 import com.example.huertohogar_mobil.data.P2pManager
 import com.example.huertohogar_mobil.data.SocialDao
 import com.example.huertohogar_mobil.data.SolicitudDao
@@ -25,7 +26,8 @@ class SocialViewModel @Inject constructor(
     private val socialDao: SocialDao,
     private val userDao: UserDao,
     private val solicitudDao: SolicitudDao,
-    private val p2pManager: P2pManager
+    private val p2pManager: P2pManager,
+    private val firebaseRepository: FirebaseRepository
 ) : ViewModel() {
 
     private val TAG = "SocialVM"
@@ -33,6 +35,22 @@ class SocialViewModel @Inject constructor(
     val currentUser = _currentUser.asStateFlow()
 
     val connectedPeers: StateFlow<Set<String>> = p2pManager.connectedPeers
+
+    private val _currentChatFriendId = MutableStateFlow<Int?>(null)
+
+    // Flujo para el estado de conexión del amigo actual en el chat
+    val chatFriendStatus: StateFlow<Boolean> = _currentChatFriendId
+        .filterNotNull()
+        .flatMapLatest { friendId ->
+            val friend = userDao.getUserById(friendId)
+            if (friend != null) {
+                firebaseRepository.observeUserStatus(friend.email)
+            } else {
+                flowOf(false)
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
 
     val amigos: StateFlow<List<User>> = _currentUser
         .filterNotNull()
@@ -46,8 +64,6 @@ class SocialViewModel @Inject constructor(
 
     private val _searchResults = MutableStateFlow<List<User>>(emptyList())
     val searchResults = _searchResults.asStateFlow()
-
-    private val _currentChatFriendId = MutableStateFlow<Int?>(null)
     
     val chatMessages: StateFlow<List<MensajeChat>> = combine(_currentUser, _currentChatFriendId) { user, friendId ->
         Pair(user, friendId)
@@ -66,7 +82,6 @@ class SocialViewModel @Inject constructor(
                 val me = _currentUser.value
                 if (me != null) {
                     peers.forEach { peerEmail ->
-                        // Auto-Sincronizar con mis otros dispositivos (si me encuentro a mi mismo)
                         if (peerEmail == me.email) {
                             Log.d(TAG, "🔄 Encontrado mi otro dispositivo. Iniciando Sync...")
                             p2pManager.solicitarSincronizacion(peerEmail)
@@ -89,7 +104,12 @@ class SocialViewModel @Inject constructor(
                 if (pendientes.isNotEmpty()) {
                     Log.d(TAG, "📨 Encontrados ${pendientes.size} mensajes pendientes para ${destinatario.email}")
                     pendientes.forEach { msg ->
-                        val enviado = p2pManager.sendMessage(remitente.name, remitente.email, destinatario.email, msg.contenido)
+                        var enviado = p2pManager.sendMessage(remitente.name, remitente.email, destinatario.email, msg.contenido)
+                        
+                        if (!enviado) {
+                             enviado = firebaseRepository.sendMessage(remitente, destinatario.email, msg.contenido)
+                        }
+
                         if (enviado) {
                             socialDao.updateEstado(msg.id, EstadoMensaje.ENVIADO)
                         }
@@ -106,6 +126,8 @@ class SocialViewModel @Inject constructor(
             val user = userDao.getUserByEmail(email)
             if (user != null) {
                 _currentUser.value = user
+                p2pManager.initialize(user.email)
+                firebaseRepository.initialize(user.email)
             }
         }
     }
@@ -116,6 +138,7 @@ class SocialViewModel @Inject constructor(
             if (user != null) {
                 _currentUser.value = user
                 p2pManager.initialize(user.email)
+                firebaseRepository.initialize(user.email)
             }
         }
     }
@@ -135,10 +158,7 @@ class SocialViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
-            // Buscamos usuarios en la BD local (incluyendo administradores y usuarios)
             val localResults = socialDao.buscarUsuarios(user.id, query)
-            
-            // Buscamos usuarios en la red P2P (filtrando el usuario actual)
             val p2pEmails = p2pManager.connectedPeers.value.filter { 
                 it.contains(query, ignoreCase = true) && it != user.email
             }
@@ -155,29 +175,27 @@ class SocialViewModel @Inject constructor(
     fun enviarSolicitudAmistad(destinatario: User) {
         val user = _currentUser.value ?: return
         viewModelScope.launch {
-            // Fix: Asegurarse de que el destinatario existe en la BD local antes de enviar la solicitud si no existía
-            if (destinatario.id == 0) { // Si es un usuario "Wi-Fi" (no guardado)
-                 // Guardar usuario temporalmente para poder referenciarlo
+            if (destinatario.id == 0) {
                  val tempUser = destinatario.copy(passwordHash = "p2p_guest")
                  userDao.insertUser(tempUser)
             }
             
-            // Intentar enviar la solicitud
-            val success = p2pManager.sendMessage(
+            var success = p2pManager.sendMessage(
                 senderName = user.name,
                 senderEmail = user.email,
                 receiverEmail = destinatario.email,
                 content = "Hola, quiero ser tu amigo",
                 type = "FRIEND_REQUEST"
             )
+            
+            if (!success) {
+                success = firebaseRepository.sendMessage(user, destinatario.email, "Hola, quiero ser tu amigo", "FRIEND_REQUEST")
+            }
 
             if (success) {
-                // Feedback visual: Si se envía correctamente, podemos quitarlo de la lista o marcarlo.
-                // Por ahora lo quitamos para simular "enviado".
                 _searchResults.value = _searchResults.value.filter { it.email != destinatario.email }
             } else {
                 Log.e(TAG, "Error al enviar solicitud de amistad a ${destinatario.email}")
-                // Aquí se podría mostrar un mensaje de error en la UI si tuviéramos un estado de UI para errores
             }
         }
     }
@@ -195,18 +213,20 @@ class SocialViewModel @Inject constructor(
             }
 
             if (senderUser != null) {
-                // Fix: Añadir lógica para evitar duplicados en la tabla de amistad si ya existe
                 socialDao.agregarAmigo(Amistad(user.id, senderUser.id))
                 socialDao.agregarAmigo(Amistad(senderUser.id, user.id))
 
-                // Enviar confirmación al solicitante
-                p2pManager.sendMessage(
+                var sent = p2pManager.sendMessage(
                     senderName = user.name,
                     senderEmail = user.email,
                     receiverEmail = solicitud.senderEmail,
                     content = "Solicitud aceptada",
                     type = "REQUEST_ACCEPTED"
                 )
+                
+                if (!sent) {
+                     firebaseRepository.sendMessage(user, solicitud.senderEmail, "Solicitud aceptada", "REQUEST_ACCEPTED")
+                }
             }
         }
     }
@@ -223,11 +243,9 @@ class SocialViewModel @Inject constructor(
 
     fun enviarMensaje(destinatarioId: Int, texto: String, tipoContenido: String = TipoContenido.TEXTO) {
         val user = _currentUser.value ?: return
-        // No permitir enviar vacío si es texto, pero sí si es otro tipo (aunque el texto sea vacío, la lógica puede ir en el tipo)
         if (texto.isBlank() && tipoContenido == TipoContenido.TEXTO) return
         
         viewModelScope.launch {
-            // 1. Guardamos el mensaje localmente con estado ENVIANDO
             val nuevoMensaje = MensajeChat(
                 remitenteId = user.id,
                 destinatarioId = destinatarioId,
@@ -240,25 +258,26 @@ class SocialViewModel @Inject constructor(
             val destinatario = userDao.getUserById(destinatarioId)
             var enviado = false
 
-            // 2. Intentamos enviar el mensaje
             if (destinatario != null) {
-                // Aquí deberíamos ajustar sendMessage para soportar tipos de contenido si P2PManager lo soportara
-                // Por ahora enviamos texto plano, pero podríamos serializar JSON si P2PManager lo permite.
-                // Asumimos que el contenido ya es una representación enviada (texto o URI/Path)
-                enviado = p2pManager.sendMessage(user.name, user.email, destinatario.email, texto)
+                enviado = p2pManager.sendMessage(user.name, user.email, destinatario.email, texto, 
+                                                if (tipoContenido == TipoContenido.TEXTO) "CHAT" else tipoContenido)
+                
+                if (!enviado) {
+                    enviado = firebaseRepository.sendMessage(user, destinatario.email, texto, 
+                                                            if (tipoContenido == TipoContenido.TEXTO) "CHAT" else tipoContenido)
+                }
             } 
             
-            // 3. Actualizamos el estado final
             val estadoFinal = if (enviado) EstadoMensaje.ENVIADO else EstadoMensaje.ERROR
             socialDao.updateEstado(mensajeId, estadoFinal)
         }
     }
 
     fun solicitarSincronizacionManual(email: String) {
+        p2pManager.restartDiscovery()
         p2pManager.solicitarSincronizacion(email)
     }
 
-    // Funciones placeholders para adjuntos
     fun adjuntarFoto(uri: String, amigoId: Int) {
         enviarMensaje(amigoId, uri, TipoContenido.IMAGEN)
     }
@@ -277,6 +296,6 @@ class SocialViewModel @Inject constructor(
 
     override fun onCleared() {
         super.onCleared()
-        p2pManager.tearDown()
+        firebaseRepository.cleanup()
     }
 }
