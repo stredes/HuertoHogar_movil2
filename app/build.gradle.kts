@@ -1,3 +1,6 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -6,21 +9,36 @@ plugins {
     id("com.google.dagger.hilt.android")
 }
 
+// Leer propiedades para la firma
+val props = Properties()
+val propFile = project.rootProject.file("gradle.properties")
+if (propFile.exists()) {
+    props.load(FileInputStream(propFile))
+}
+
 android {
     namespace = "com.example.huertohogar_mobil"
-
-    // Usa una versión estable; SDK 35 es la recomendada por ahora.
     compileSdk = 35
+
+    signingConfigs {
+        create("release") {
+            if (props.getProperty("MY_RELEASE_STORE_FILE") != null) {
+                storeFile = file(props.getProperty("MY_RELEASE_STORE_FILE"))
+                storePassword = props.getProperty("MY_RELEASE_STORE_PASSWORD")
+                keyAlias = props.getProperty("MY_RELEASE_KEY_ALIAS")
+                keyPassword = props.getProperty("MY_RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
 
     defaultConfig {
         applicationId = "com.example.huertohogar_mobil"
         minSdk = 24
-        targetSdk = 35 // puedes dejar 36 si ya instalaste ese SDK; 35 es estable
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // Configuración para exportar el esquema de Room
         javaCompileOptions {
             annotationProcessorOptions {
                 arguments["room.schemaLocation"] = "$projectDir/schemas"
@@ -30,6 +48,14 @@ android {
 
     buildTypes {
         release {
+            isMinifyEnabled = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            signingConfig = signingConfigs.getByName("release")
+        }
+        debug {
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -38,7 +64,6 @@ android {
         }
     }
 
-    // Java/Kotlin 17 recomendado para AGP + Compose modernos
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -52,7 +77,6 @@ android {
     }
 }
 
-// Configuración adicional para kapt si javaCompileOptions no es suficiente en algunas versiones
 kapt {
     arguments {
         arg("room.schemaLocation", "$projectDir/schemas")
@@ -60,43 +84,27 @@ kapt {
 }
 
 dependencies {
-    // Core
+    // ... (sin cambios)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
-
-    // Compose BOM + Material3 + UI base (del version catalog)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
-
-    // Navigation + lifecycle compose
     implementation("androidx.navigation:navigation-compose:2.8.3")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.6")
-
-    // Coil (Carga de imágenes asíncrona)
     implementation("io.coil-kt:coil-compose:2.5.0")
-
-    // Iconos extendidos (si usas muchos íconos)
     implementation("androidx.compose.material:material-icons-extended")
-
-    // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
-
-    // Hilt
     implementation("com.google.dagger:hilt-android:2.51.1")
     kapt("com.google.dagger:hilt-compiler:2.51.1")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
-
-    // Room
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     kapt(libs.androidx.room.compiler)
-
-    // Tests
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

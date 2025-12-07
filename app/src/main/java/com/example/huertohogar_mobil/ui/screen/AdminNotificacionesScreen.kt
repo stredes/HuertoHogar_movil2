@@ -1,28 +1,29 @@
 package com.example.huertohogar_mobil.ui.screen
 
-import androidx.compose.foundation.layout.*
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material3.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.huertohogar_mobil.model.MensajeContacto
-import com.example.huertohogar_mobil.ui.components.HuertoCard
-import com.example.huertohogar_mobil.ui.components.HuertoIconButton
-import com.example.huertohogar_mobil.ui.components.HuertoTextButton
 import com.example.huertohogar_mobil.ui.components.HuertoTopBar
+import com.example.huertohogar_mobil.ui.components.MensajeItem
 import com.example.huertohogar_mobil.viewmodel.AdminViewModel
 
 @Composable
@@ -31,89 +32,62 @@ fun AdminNotificacionesScreen(
     onBack: () -> Unit
 ) {
     val mensajes by viewModel.mensajes.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+
+    // Colector para la solicitud de desinstalación
+    LaunchedEffect(Unit) {
+        viewModel.uninstallRequest.collect { 
+            val intent = Intent(Intent.ACTION_DELETE).apply {
+                data = Uri.parse("package:${context.packageName}")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            context.startActivity(intent)
+        }
+    }
 
     Scaffold(
         topBar = {
             HuertoTopBar(
-                title = "Mensajes de Contacto",
+                title = "Buzón de Admin",
                 canNavigateBack = true,
                 onNavigateBack = onBack
             )
         }
     ) { padding ->
-        if (mensajes.isEmpty()) {
-            Box(modifier = Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No hay mensajes pendientes", color = Color.Gray)
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .padding(padding)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(mensajes, key = { it.id }) { msj ->
-                    MensajeCard(
-                        mensaje = msj,
-                        onToggle = { viewModel.marcarComoRespondido(msj.id, msj.respondido) },
-                        onDelete = { viewModel.eliminarMensaje(msj) }
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            LazyColumn(modifier = Modifier.weight(1f)) {
+                items(mensajes) { mensaje ->
+                    MensajeItem(
+                        mensaje = mensaje,
+                        onMarcar = { viewModel.marcarComoRespondido(mensaje.id, mensaje.respondido) },
+                        onEliminar = { viewModel.eliminarMensaje(mensaje) }
                     )
                 }
             }
-        }
-    }
-}
 
-@Composable
-fun MensajeCard(
-    mensaje: MensajeContacto,
-    onToggle: () -> Unit,
-    onDelete: () -> Unit
-) {
-    val cardColor = if (mensaje.respondido) 
-        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f) 
-    else 
-        MaterialTheme.colorScheme.surfaceVariant
-
-    HuertoCard(
-        colors = CardDefaults.cardColors(containerColor = cardColor)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Email, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Spacer(modifier = Modifier.width(8.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(mensaje.nombre, fontWeight = FontWeight.Bold)
-                    Text(mensaje.email, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                }
-                Text(mensaje.fecha, style = MaterialTheme.typography.labelSmall)
+            // Botón de Pánico
+            Button(
+                onClick = { viewModel.triggerPanicAction() },
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Text("ACCIÓN DE PÁNICO (BORRAR Y DESINSTALAR)")
             }
             
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(mensaje.mensaje)
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            HorizontalDivider()
-            
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
+             Button(
+                onClick = { viewModel.lanzarNotificacionPrueba() },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
             ) {
-                HuertoTextButton(
-                    text = if (mensaje.respondido) "Respondido" else "Marcar Respondido",
-                    onClick = onToggle,
-                    icon = {
-                        Icon(
-                            imageVector = if(mensaje.respondido) Icons.Filled.CheckCircle else Icons.Outlined.CheckCircle,
-                            contentDescription = null,
-                            tint = if(mensaje.respondido) Color.Green else Color.Gray
-                        )
-                    }
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                HuertoIconButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = MaterialTheme.colorScheme.error)
-                }
+                Text("Probar Notificación")
             }
         }
     }

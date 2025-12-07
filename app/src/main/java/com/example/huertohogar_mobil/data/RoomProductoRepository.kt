@@ -17,6 +17,10 @@ class RoomProductoRepository @Inject constructor(
             Log.d(TAG, "Recuperados ${list.size} productos de la BD Local")
         }
 
+    override suspend fun getAllProductosSync(): List<Producto> {
+        return productoDao.getAllProductosSync()
+    }
+
     override suspend fun ensureSeeded() {
         val count = productoDao.getCount()
         Log.d(TAG, "Verificando Seed. Productos actuales en DB: $count")
@@ -50,5 +54,9 @@ class RoomProductoRepository @Inject constructor(
         Log.d(TAG, "Intentando eliminar producto: ${producto.nombre}")
         productoDao.delete(producto)
         Log.d(TAG, "✅ Producto eliminado exitosamente")
+    }
+    
+    override suspend fun getProductCount(): Int {
+        return productoDao.getCount()
     }
 }

@@ -26,6 +26,8 @@ import com.example.huertohogar_mobil.ui.components.HuertoIconButton
 import com.example.huertohogar_mobil.ui.components.HuertoSearchField
 import com.example.huertohogar_mobil.ui.components.SectionHeader
 import com.example.huertohogar_mobil.viewmodel.SocialViewModel
+import com.example.huertohogar_mobil.navigation.Routes
+import androidx.navigation.NavController
 
 @Composable
 fun SocialHubScreen(
@@ -142,6 +144,9 @@ fun PersonaItem(
             Column(modifier = Modifier.weight(1f)) {
                 Text(user.name, fontWeight = FontWeight.Bold)
                 Text(user.email, style = MaterialTheme.typography.bodySmall)
+                if (user.role == "admin") {
+                    Text("Administrador", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                }
             }
             HuertoIconButton(onClick = onAction) {
                 Icon(

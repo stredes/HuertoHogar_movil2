@@ -9,6 +9,10 @@ interface CarritoDao {
     @Query("SELECT * FROM carrito_items")
     fun getCarrito(): Flow<List<CarritoItem>>
 
+    // Version sincrona para P2P Sync
+    @Query("SELECT * FROM carrito_items")
+    suspend fun getCarritoSync(): List<CarritoItem>
+
     @Query("SELECT * FROM carrito_items WHERE productoId = :productoId")
     suspend fun getItem(productoId: String): CarritoItem?
 

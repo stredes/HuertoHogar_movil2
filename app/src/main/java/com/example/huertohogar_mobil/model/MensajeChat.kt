@@ -9,6 +9,17 @@ object EstadoMensaje {
     const val ENVIADO = 1
     const val ERROR = 2
     const val RECIBIDO = 3
+    const val LEIDO = 4
+}
+
+// Tipo de contenido para multimedia
+object TipoContenido {
+    const val TEXTO = "TEXTO"
+    const val IMAGEN = "IMAGEN"
+    const val AUDIO = "AUDIO"
+    const val VIDEO = "VIDEO"
+    const val UBICACION = "UBICACION"
+    const val ARCHIVO = "ARCHIVO"
 }
 
 @Entity(
@@ -22,7 +33,8 @@ data class MensajeChat(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val remitenteId: Int,
     val destinatarioId: Int,
-    val contenido: String,
+    val contenido: String, // Texto o URI del archivo
+    val tipoContenido: String = TipoContenido.TEXTO, // Nuevo campo
     val timestamp: Long = System.currentTimeMillis(),
-    val estado: Int = EstadoMensaje.ENVIADO // Por defecto enviado para compatibilidad
+    val estado: Int = EstadoMensaje.ENVIADO
 )

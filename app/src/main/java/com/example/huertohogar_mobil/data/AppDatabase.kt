@@ -14,7 +14,7 @@ import com.example.huertohogar_mobil.model.*
         MensajeChat::class,
         Solicitud::class
     ], 
-    version = 7, 
+    version = 8, 
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {

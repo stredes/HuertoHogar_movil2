@@ -1,19 +1,29 @@
 package com.example.huertohogar_mobil
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.core.content.ContextCompat
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -25,221 +35,255 @@ import com.example.huertohogar_mobil.ui.screen.*
 import com.example.huertohogar_mobil.ui.theme.HuertoHogarMobilTheme
 import com.example.huertohogar_mobil.viewmodel.AuthViewModel
 import com.example.huertohogar_mobil.viewmodel.MarketViewModel
-import com.example.huertohogar_mobil.viewmodel.SocialViewModel // Importar SocialViewModel
+import com.example.huertohogar_mobil.viewmodel.SocialViewModel
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     private val vm: MarketViewModel by viewModels()
     private val authVm: AuthViewModel by viewModels()
-    private val socialVm: SocialViewModel by viewModels() // Inyectar SocialViewModel
+    private val socialVm: SocialViewModel by viewModels()
+
+    private lateinit var navController: NavHostController
+
+    private val requestPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        if (permissions.entries.all { it.value }) {
+            onAllPermissionsGranted()
+        } else {
+            onPermissionsDenied()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        vm.toString() 
+
+        if (!hasAllRequiredPermissions()) {
+             requestRuntimePermissions()
+        }
 
         setContent {
             HuertoHogarMobilTheme {
-                val nav = rememberNavController()
+                navController = rememberNavController()
                 val ui = vm.ui.collectAsStateWithLifecycle().value
                 val authState by authVm.uiState.collectAsStateWithLifecycle()
-
-                val navBackStackEntry by nav.currentBackStackEntryAsState()
+                val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentRoute = navBackStackEntry?.destination?.route
                 
                 val showBottomBar = currentRoute !in listOf(
                     Routes.IniciarSesion.route, 
-                    Routes.Registrarse.route
-                )
+                    Routes.Registrarse.route,
+                    Routes.RootDashboard.route
+                ) && !(currentRoute?.startsWith("edit_user") == true)
                 
                 val isAdmin = authState.user?.role == "admin"
 
-                // Inicializar P2P con usuario actual
-                if (authState.user != null) {
-                    socialVm.setCurrentUser(authState.user!!.email)
+                LaunchedEffect(authState.user, hasAllRequiredPermissions()) {
+                    if (authState.user != null && authState.user!!.role != "root" && hasAllRequiredPermissions()) {
+                        socialVm.onPermissionsGranted(authState.user!!.email)
+                    }
                 }
 
                 Scaffold(
                     bottomBar = { 
                         if (showBottomBar) {
-                            BottomNavBar(navController = nav, isAdmin = isAdmin)
+                            BottomNavBar(navController = navController, isAdmin = isAdmin)
                         }
                     }
                 ) { paddingValues ->
                     NavHost(
                         modifier = Modifier.padding(paddingValues),
-                        navController = nav,
+                        navController = navController,
                         startDestination = Routes.IniciarSesion.route
                     ) {
-                        composable(Routes.Inicio.route) {
+                        composable(Routes.Inicio.route) { 
                             InicioScreen(
-                                onNavigateToProductos = { nav.navigate(Routes.Productos.route) },
-                                onLogout = {
+                                onNavigateToProductos = { navController.navigate(Routes.Productos.route) }, 
+                                onLogout = { 
                                     authVm.logout()
-                                    nav.navigate(Routes.IniciarSesion.route) {
-                                        popUpTo(0) { inclusive = true }
-                                        launchSingleTop = true
-                                    }
+                                    navController.navigate(Routes.IniciarSesion.route) { popUpTo(0) }
                                 }
                             )
                         }
-                        composable(Routes.Productos.route) {
+                        composable(Routes.Productos.route) { 
                             CatalogoScreen(
-                                ui = ui,
-                                onBuscar = vm::setQuery,
-                                onVer = { p -> nav.navigate(Routes.Detalle.create(p.id)) },
-                                onAgregar = { p -> vm.agregar(p, +1) },
-                                irCarrito = { nav.navigate(Routes.Carrito.route) }
+                                ui = ui, 
+                                onBuscar = vm::setQuery, 
+                                onVer = { p -> navController.navigate(Routes.Detalle.create(p.id)) }, 
+                                onAgregar = { p -> vm.agregar(p, 1) }, 
+                                irCarrito = { navController.navigate(Routes.Carrito.route) }
                             )
                         }
                         composable(Routes.Nosotros.route) { NosotrosScreen() }
                         composable(Routes.Blog.route) { BlogScreen() }
                         composable(Routes.Contacto.route) { ContactoScreen() }
-                        
-                        // Nueva funcionalidad Social
-                        composable(Routes.SocialHub.route) {
+                        composable(Routes.SocialHub.route) { 
                             SocialHubScreen(
-                                currentUserEmail = authState.user?.email,
-                                onChatClick = { amigoId ->
-                                    nav.navigate(Routes.Chat.create(amigoId, "Chat"))
-                                }
+                                currentUserEmail = authState.user?.email, 
+                                onChatClick = { amigoId -> navController.navigate(Routes.Chat.create(amigoId, "Chat")) }
                             )
                         }
-                        
-                        composable(
-                            route = Routes.Chat.route,
-                            arguments = listOf(
-                                navArgument(Routes.Chat.ARG_ID) { type = NavType.IntType },
-                                navArgument(Routes.Chat.ARG_NOMBRE) { type = NavType.StringType }
-                            )
-                        ) { backStack ->
+                        composable(Routes.Chat.route, arguments = listOf(navArgument(Routes.Chat.ARG_ID) { type = NavType.IntType }, navArgument(Routes.Chat.ARG_NOMBRE) { type = NavType.StringType })) { backStack ->
                             val id = backStack.arguments?.getInt(Routes.Chat.ARG_ID) ?: 0
                             val nombre = backStack.arguments?.getString(Routes.Chat.ARG_NOMBRE) ?: "Amigo"
-                            
                             ChatScreen(
-                                amigoId = id,
-                                amigoNombre = nombre,
-                                currentUserEmail = authState.user?.email,
-                                onBack = { nav.popBackStack() }
+                                amigoId = id, 
+                                amigoNombre = nombre, 
+                                currentUserEmail = authState.user?.email, 
+                                onBack = { navController.popBackStack() }
                             )
                         }
-                        
-                        // Rutas de Admin
-                        composable(
-                            route = Routes.AgregarProducto.route,
-                            arguments = listOf(navArgument(Routes.AgregarProducto.ARG_ID) { 
-                                type = NavType.StringType
-                                nullable = true 
-                            })
-                        ) { backStack ->
-                             val id = backStack.arguments?.getString(Routes.AgregarProducto.ARG_ID)
-                             val producto = if(id != null) ui.productos.firstOrNull { it.id == id } else null
-                             
-                             AgregarProductoScreen(
-                                 productoEditar = producto,
-                                 onBack = { nav.popBackStack() }
-                             )
-                        }
-
-                        composable(Routes.AdminNotificaciones.route) {
-                            AdminNotificacionesScreen(
-                                onBack = { nav.popBackStack() }
+                        composable(Routes.AgregarProducto.route, arguments = listOf(navArgument(Routes.AgregarProducto.ARG_ID) { type = NavType.StringType; nullable = true })) { backStack ->
+                            val id = backStack.arguments?.getString(Routes.AgregarProducto.ARG_ID)
+                            val producto = if (id != null) ui.productos.firstOrNull { it.id == id } else null
+                            AgregarProductoScreen(
+                                viewModel = vm,
+                                productoEditar = producto, 
+                                onBack = { navController.popBackStack() }
                             )
                         }
-
+                        composable(Routes.AdminNotificaciones.route) { AdminNotificacionesScreen(onBack = { navController.popBackStack() }) }
                         composable(Routes.IniciarSesion.route) { 
                             IniciarSesionScreen(
-                                viewModel = authVm,
+                                viewModel = authVm, 
                                 onLoginExitoso = { 
-                                    nav.navigate(Routes.Inicio.route) {
-                                        popUpTo(Routes.IniciarSesion.route) { inclusive = true }
+                                    val user = authVm.uiState.value.user
+                                    if (user?.role == "root") {
+                                        navController.navigate(Routes.RootDashboard.route) { popUpTo(Routes.IniciarSesion.route) { inclusive = true } }
+                                    } else {
+                                        navController.navigate(Routes.Inicio.route) { popUpTo(Routes.IniciarSesion.route) { inclusive = true } }
                                     }
-                                },
-                                onIrARegistro = {
-                                    nav.navigate(Routes.Registrarse.route)
-                                }
+                                }, 
+                                onIrARegistro = { navController.navigate(Routes.Registrarse.route) }
                             )
                         }
-                        
                         composable(Routes.Registrarse.route) { 
                             RegistrarseScreen(
-                                viewModel = authVm,
-                                onRegistroExitoso = { 
-                                    nav.navigate(Routes.Inicio.route) {
-                                        popUpTo(Routes.IniciarSesion.route) { inclusive = true }
-                                    }
-                                }
+                                viewModel = authVm, 
+                                onRegistroExitoso = { navController.navigate(Routes.Inicio.route) { popUpTo(Routes.IniciarSesion.route) { inclusive = true } } }
                             )
                         }
-                        
-                        composable(Routes.FinPago.route) {
-                            FinPagoScreen(onVolverAlInicio = {
-                                nav.navigate(Routes.Inicio.route) {
-                                    popUpTo(Routes.Inicio.route) { inclusive = true }
-                                }
-                            })
-                        }
-
-                        composable(
-                            route = Routes.Detalle.route,
-                            arguments = listOf(navArgument(Routes.Detalle.ARG_ID) { type = NavType.StringType })
-                        ) { backStack ->
+                        composable(Routes.FinPago.route) { FinPagoScreen { navController.navigate(Routes.Inicio.route) { popUpTo(Routes.Inicio.route) { inclusive = true } } } }
+                        composable(Routes.Detalle.route, arguments = listOf(navArgument(Routes.Detalle.ARG_ID) { type = NavType.StringType })) { backStack ->
                             val id = backStack.arguments?.getString(Routes.Detalle.ARG_ID)
                             val producto = ui.productos.firstOrNull { it.id == id }
                             if (producto != null) {
                                 DetalleScreen(
-                                    ui = ui,
-                                    producto = producto,
+                                    ui = ui, 
+                                    producto = producto, 
                                     isAdmin = isAdmin, 
-                                    onBack = { nav.popBackStack() },
-                                    irCarrito = { nav.navigate(Routes.Carrito.route) },
-                                    onAgregar = { vm.agregar(producto, +1) },
-                                    onEditar = { nav.navigate(Routes.AgregarProducto.create(producto.id)) },
-                                    onEliminar = { 
-                                        vm.eliminarProducto(producto)
-                                        nav.popBackStack()
-                                    }
+                                    onBack = { navController.popBackStack() }, 
+                                    irCarrito = { navController.navigate(Routes.Carrito.route) }, 
+                                    onAgregar = { vm.agregar(producto, 1) }, 
+                                    onEditar = { navController.navigate(Routes.AgregarProducto.create(producto.id)) }, 
+                                    onEliminar = { vm.eliminarProducto(producto); navController.popBackStack() }
                                 )
                             }
                         }
-
-                        composable(Routes.Carrito.route) {
+                        composable(Routes.Carrito.route) { 
                             CarritoScreen(
-                                ui = ui,
-                                onSumar = { p -> vm.agregar(p, +1) },
-                                onRestar = { p -> vm.agregar(p, -1) },
-                                onBack = { nav.popBackStack() },
-                                onCheckout = { nav.navigate(Routes.Checkout.route) },
-                                onCompartir = { nav.navigate(Routes.CompartirCarrito.route) }
+                                ui = ui, 
+                                onSumar = { p -> vm.agregar(p, 1) }, 
+                                onRestar = { p -> vm.agregar(p, -1) }, 
+                                onBack = { navController.popBackStack() }, 
+                                onCheckout = { navController.navigate(Routes.Checkout.route) }, 
+                                onCompartir = { navController.navigate(Routes.CompartirCarrito.route) }
                             )
                         }
-                        
-                        composable(Routes.CompartirCarrito.route) {
+                        composable(Routes.CompartirCarrito.route) { 
                             CompartirCarritoScreen(
-                                marketUiState = ui,
-                                socialViewModel = socialVm, // Usar el viewModel inyectado
-                                onBack = { nav.popBackStack() },
-                                onCompartidoExitoso = {
-                                    nav.popBackStack() // Vuelve al carrito
+                                marketUiState = ui, 
+                                socialViewModel = socialVm, 
+                                onBack = { navController.popBackStack() }, 
+                                onCompartidoExitoso = { navController.popBackStack() }
+                            )
+                        }
+                        composable(Routes.Checkout.route) { 
+                            CheckoutScreen(
+                                ui = ui, 
+                                onBack = { navController.popBackStack() }, 
+                                onFinalizar = { vm.limpiarCarrito(); navController.navigate(Routes.FinPago.route) }
+                            )
+                        }
+                        composable(Routes.RootDashboard.route) { 
+                            RootDashboardScreen(
+                                viewModel = hiltViewModel(),
+                                onNavigateCreate = { navController.navigate(Routes.EditUser.create(null)) }, 
+                                onNavigateUsers = { navController.navigate(Routes.RootUsers.route) }, 
+                                onNavigateProducts = { navController.navigate(Routes.RootProducts.route) }, 
+                                onLogout = { 
+                                    authVm.logout()
+                                    navController.navigate(Routes.IniciarSesion.route) { popUpTo(0) }
                                 }
                             )
                         }
-
-                        composable(Routes.Checkout.route) {
-                            CheckoutScreen(
-                                ui = ui,
-                                onBack = { nav.popBackStack() },
-                                onFinalizar = {
-                                    vm.limpiarCarrito()
-                                    nav.navigate(Routes.FinPago.route)
-                                }
+                        composable(Routes.RootUsers.route) { 
+                            RootUsersScreen(
+                                onNavigateEdit = { id -> navController.navigate(Routes.EditUser.create(id)) }, 
+                                onNavigateCreate = { navController.navigate(Routes.EditUser.create(null)) }, 
+                                onBack = { navController.popBackStack() }
+                            )
+                        }
+                        composable(Routes.RootProducts.route) { RootProductsScreen(onBack = { navController.popBackStack() }) }
+                        composable(Routes.EditUser.route, arguments = listOf(navArgument(Routes.EditUser.ARG_ID) { type = NavType.IntType; defaultValue = 0 })) { backStack ->
+                            val id = backStack.arguments?.getInt(Routes.EditUser.ARG_ID)
+                            val finalId = if (id != 0) id else null
+                            EditUserScreen(
+                                userId = finalId, 
+                                onBack = { navController.popBackStack() }
                             )
                         }
                     }
                 }
             }
         }
+        
+        handleIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        if (intent?.action == "ACTION_OPEN_CHAT") {
+            val userId = intent.getIntExtra("chat_user_id", -1)
+            val userName = intent.getStringExtra("chat_user_name")
+            if (userId != -1 && userName != null && ::navController.isInitialized) {
+                navController.navigate(Routes.Chat.create(userId, userName))
+            }
+        }
+    }
+
+    private fun hasAllRequiredPermissions(): Boolean {
+        val permissions = if (Build.VERSION.SDK_INT >= 33) {
+            listOf(Manifest.permission.NEARBY_WIFI_DEVICES, Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            listOf(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+        return permissions.all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }
+    }
+
+    private fun requestRuntimePermissions() {
+        val permissions = if (Build.VERSION.SDK_INT >= 33) {
+            arrayOf(Manifest.permission.NEARBY_WIFI_DEVICES, Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+        }
+        requestPermissionLauncher.launch(permissions)
+    }
+    
+    private fun onAllPermissionsGranted() {
+        val user = authVm.uiState.value.user
+        if (user != null && user.role != "root") {
+            socialVm.onPermissionsGranted(user.email)
+        }
+    }
+
+    private fun onPermissionsDenied() {
+        Log.w("MainActivity", "Permisos denegados.")
     }
 }
 
@@ -248,42 +292,36 @@ fun BottomNavBar(navController: NavController, isAdmin: Boolean) {
     val items = mutableListOf(
         Routes.Inicio to Icons.Default.Home,
         Routes.Productos to Icons.Default.Store,
-        Routes.SocialHub to Icons.Default.People, // Nuevo ítem Social
+        Routes.SocialHub to Icons.Default.People, 
         Routes.Nosotros to Icons.Default.Info,
         Routes.Blog to Icons.Default.Article,
-        // Routes.Contacto to Icons.Default.Email, // Sacamos contacto para hacer espacio
-    )
-    
-    if (isAdmin) {
-        items.add(Routes.AgregarProducto to Icons.Default.AddCircle)
-        items.add(Routes.AdminNotificaciones to Icons.Default.Notifications)
+    ).apply {
+        if (isAdmin) {
+            add(Routes.AgregarProducto to Icons.Default.AddCircle)
+            add(Routes.AdminNotificaciones to Icons.Default.Notifications)
+        }
     }
 
     NavigationBar {
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val currentRoute = navBackStackEntry?.destination?.route
+
         items.forEach { (screen, icon) ->
+            val isSelected = currentRoute?.startsWith(screen.route.substringBefore("/")) == true
             
-            val isSelected = when(screen) {
-                 Routes.AgregarProducto -> currentRoute?.startsWith("agregar_producto") == true
-                 else -> currentRoute == screen.route
-            }
-            
-            val label = when(screen) {
+            val label = when (screen) {
                 Routes.AgregarProducto -> "Crear"
                 Routes.AdminNotificaciones -> "Buzón"
                 Routes.SocialHub -> "Comunidad"
-                else -> screen.route.substringBefore("/").replaceFirstChar { it.uppercase() }
+                else -> screen.route.replaceFirstChar { it.uppercase() }
             }
 
             NavigationBarItem(
-                icon = { Icon(icon, contentDescription = null) },
-                label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+                icon = { Icon(icon, contentDescription = label) },
+                label = { Text(label) },
                 selected = isSelected,
                 onClick = {
-                    val rutaDestino = if(screen == Routes.AgregarProducto) "agregar_producto" else screen.route
-                    
-                    navController.navigate(rutaDestino) {
+                    navController.navigate(screen.route) {
                         popUpTo(navController.graph.findStartDestination().id) {
                             saveState = true
                         }

@@ -32,4 +32,14 @@ sealed class Routes(val route: String) {
         const val ARG_NOMBRE = "nombre"
     }
     data object CompartirCarrito : Routes("compartir_carrito")
+    
+    // Rutas Root
+    data object RootDashboard : Routes("root_dashboard")
+    data object CreateAdmin : Routes("create_admin") // Mantenemos por compatibilidad, pero usaremos EditUser
+    data object RootUsers : Routes("root_users")
+    data object RootProducts : Routes("root_products")
+    data object EditUser : Routes("edit_user?id={id}") {
+        fun create(id: Int? = null) = if (id != null) "edit_user?id=$id" else "edit_user"
+        const val ARG_ID = "id"
+    }
 }

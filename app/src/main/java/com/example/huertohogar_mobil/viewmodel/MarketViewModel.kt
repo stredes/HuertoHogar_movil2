@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.huertohogar_mobil.data.CarritoDao
 import com.example.huertohogar_mobil.data.MensajeRepository
+import com.example.huertohogar_mobil.data.P2pManager
 import com.example.huertohogar_mobil.data.ProductoRepository
 import com.example.huertohogar_mobil.model.CarritoItem
 import com.example.huertohogar_mobil.model.Producto
@@ -13,6 +14,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
+import org.json.JSONObject
 
 private const val TAG = "DB_DEBUG_MARKET"
 
@@ -37,7 +39,8 @@ data class MarketUiState(
 class MarketViewModel @Inject constructor(
     private val repo: ProductoRepository,
     private val carritoDao: CarritoDao,
-    private val mensajeRepo: MensajeRepository // Agregamos repo de mensajes
+    private val mensajeRepo: MensajeRepository, // Agregamos repo de mensajes
+    private val p2pManager: P2pManager // Agregado para sync al editar
 ) : ViewModel() {
 
     private val _ui = MutableStateFlow(MarketUiState())
@@ -116,6 +119,7 @@ class MarketViewModel @Inject constructor(
                 imagenUri = uri
             )
             repo.agregarProducto(nuevo)
+            notificarUpsertProducto(nuevo)
         }
     }
 
@@ -132,6 +136,7 @@ class MarketViewModel @Inject constructor(
                 imagenUri = uri
             )
             repo.actualizarProducto(actualizado)
+            notificarUpsertProducto(actualizado)
         }
     }
 
@@ -140,6 +145,53 @@ class MarketViewModel @Inject constructor(
             Log.d(TAG, "🗑️ Eliminando producto ${producto.id}...")
             carritoDao.deleteItem(producto.id)
             repo.eliminarProducto(producto)
+            notificarDeleteProducto(producto.id)
+        }
+    }
+    
+    private suspend fun notificarUpsertProducto(producto: Producto) {
+        val peers = p2pManager.connectedPeers.value
+        if (peers.isEmpty()) return
+        
+        val senderEmail = p2pManager.currentUserEmail ?: "admin"
+        
+        val productJson = JSONObject().apply {
+            put("id", producto.id)
+            put("nombre", producto.nombre)
+            put("precio", producto.precioCLP)
+            put("unidad", producto.unidad)
+            put("descripcion", producto.descripcion)
+            put("imagenRes", producto.imagenRes)
+            put("imagenUri", producto.imagenUri)
+        }
+        
+        peers.forEach { peerEmail ->
+             val payload = JSONObject().apply {
+                put("type", "UPSERT_PRODUCT")
+                put("senderEmail", senderEmail)
+                put("senderName", "Admin/User")
+                put("receiverEmail", peerEmail)
+                put("product", productJson)
+            }
+            p2pManager.sendMessageJsonDirect(peerEmail, payload)
+        }
+    }
+    
+    private suspend fun notificarDeleteProducto(productId: String) {
+        val peers = p2pManager.connectedPeers.value
+        if (peers.isEmpty()) return
+        
+        val senderEmail = p2pManager.currentUserEmail ?: "admin"
+        
+        peers.forEach { peerEmail ->
+             val payload = JSONObject().apply {
+                put("type", "DELETE_PRODUCT")
+                put("senderEmail", senderEmail)
+                put("senderName", "Admin/User")
+                put("receiverEmail", peerEmail)
+                put("productId", productId)
+            }
+            p2pManager.sendMessageJsonDirect(peerEmail, payload)
         }
     }
 

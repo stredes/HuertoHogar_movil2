@@ -23,6 +23,7 @@ fun HuertoTextField(
     visualTransformation: VisualTransformation = VisualTransformation.None,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     singleLine: Boolean = true,
+    enabled: Boolean = true, // Agregado parámetro enabled
     minLines: Int = 1,
     maxLines: Int = if (singleLine) 1 else Int.MAX_VALUE,
     isError: Boolean = false,
@@ -39,6 +40,7 @@ fun HuertoTextField(
         visualTransformation = visualTransformation,
         keyboardOptions = keyboardOptions,
         singleLine = singleLine,
+        enabled = enabled, // Pasamos el valor a OutlinedTextField
         minLines = minLines,
         maxLines = maxLines,
         isError = isError,

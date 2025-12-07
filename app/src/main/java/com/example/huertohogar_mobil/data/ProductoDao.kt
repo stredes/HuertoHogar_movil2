@@ -13,6 +13,9 @@ import kotlinx.coroutines.flow.Flow
 interface ProductoDao {
     @Query("SELECT * FROM productos")
     fun getAllProductos(): Flow<List<Producto>>
+    
+    @Query("SELECT * FROM productos")
+    suspend fun getAllProductosSync(): List<Producto>
 
     @Query("SELECT COUNT(*) FROM productos")
     suspend fun getCount(): Int

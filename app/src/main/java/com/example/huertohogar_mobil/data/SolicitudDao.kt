@@ -6,7 +6,8 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface SolicitudDao {
-    @Query("SELECT * FROM solicitudes WHERE receiverEmail = :email AND estado = 'PENDIENTE'")
+    // COLLATE NOCASE para asegurar que el email coincida sin importar mayúsculas/minúsculas
+    @Query("SELECT * FROM solicitudes WHERE receiverEmail = :email COLLATE NOCASE AND estado = 'PENDIENTE'")
     fun getSolicitudesPendientes(email: String): Flow<List<Solicitud>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -18,6 +19,7 @@ interface SolicitudDao {
     @Query("DELETE FROM solicitudes WHERE id = :id")
     suspend fun deleteSolicitud(id: Int)
     
-    @Query("SELECT * FROM solicitudes WHERE senderEmail = :senderEmail AND receiverEmail = :receiverEmail")
+    // Verificación insensible a mayúsculas para evitar duplicados
+    @Query("SELECT * FROM solicitudes WHERE senderEmail = :senderEmail COLLATE NOCASE AND receiverEmail = :receiverEmail COLLATE NOCASE")
     suspend fun getSolicitud(senderEmail: String, receiverEmail: String): Solicitud?
 }

@@ -2,10 +2,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Permisos básicos de red -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    
+    <!-- Permiso de Notificaciones (Android 13+) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     
     <!-- Requerido para descubrimiento local en Android 12 y anteriores -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
@@ -25,6 +29,7 @@
         android:roundIcon="@drawable/icono"
         android:supportsRtl="true"
         android:theme="@style/Theme.HuertoHogar_mobil">
+        
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -32,7 +37,6 @@
             android:theme="@style/Theme.HuertoHogar_mobil">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>

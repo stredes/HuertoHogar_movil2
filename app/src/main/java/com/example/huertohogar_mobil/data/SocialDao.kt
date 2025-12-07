@@ -39,9 +39,36 @@ interface SocialDao {
     """)
     fun getConversacion(yoId: Int, otroId: Int): Flow<List<MensajeChat>>
 
-    @Insert
+    // Versión síncrona (suspend) para P2P Sync
+    @Query("""
+        SELECT * FROM mensajes_chat 
+        WHERE (remitenteId = :yoId AND destinatarioId = :otroId) 
+           OR (remitenteId = :otroId AND destinatarioId = :yoId)
+        ORDER BY timestamp ASC
+    """)
+    suspend fun getConversacionSync(yoId: Int, otroId: Int): List<MensajeChat>
+
+    // Para sincronizar TODO el historial (backup de mi otro dispositivo)
+    @Query("SELECT * FROM mensajes_chat")
+    suspend fun getAllMensajesSync(): List<MensajeChat>
+
+    @Query("SELECT * FROM mensajes_chat WHERE remitenteId = :remitenteId AND destinatarioId = :destinatarioId AND estado IN (0, 2)")
+    suspend fun getMensajesPendientes(remitenteId: Int, destinatarioId: Int): List<MensajeChat>
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertMensaje(mensaje: MensajeChat): Long
 
     @Query("UPDATE mensajes_chat SET estado = :nuevoEstado WHERE id = :mensajeId")
     suspend fun updateEstado(mensajeId: Long, nuevoEstado: Int)
+
+    @Query("""
+        SELECT EXISTS(
+            SELECT 1 FROM mensajes_chat 
+            WHERE remitenteId = :remitenteId 
+            AND destinatarioId = :destinatarioId 
+            AND timestamp = :timestamp 
+            AND contenido = :contenido
+        )
+    """)
+    suspend fun existeMensaje(remitenteId: Int, destinatarioId: Int, timestamp: Long, contenido: String): Boolean
 }
