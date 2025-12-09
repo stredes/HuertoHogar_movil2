@@ -17,6 +17,12 @@ interface ProductoDao {
     @Query("SELECT * FROM productos")
     suspend fun getAllProductosSync(): List<Producto>
 
+    @Query("SELECT * FROM productos WHERE providerEmail = :providerEmail")
+    fun getProductosByProvider(providerEmail: String): Flow<List<Producto>>
+
+    @Query("SELECT * FROM productos WHERE id = :id LIMIT 1")
+    suspend fun getProductoByIdSync(id: String): Producto?
+
     @Query("SELECT COUNT(*) FROM productos")
     suspend fun getCount(): Int
 

@@ -1,24 +1,19 @@
 package com.example.huertohogar_mobil.viewmodel
 
+import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import android.util.Log
-import com.example.huertohogar_mobil.data.FirebaseRepository
-import com.example.huertohogar_mobil.data.P2pManager
-import com.example.huertohogar_mobil.data.ProductoRepository
-import com.example.huertohogar_mobil.data.UserRepository
+import com.example.huertohogar_mobil.data.*
 import com.example.huertohogar_mobil.model.Producto
 import com.example.huertohogar_mobil.model.User
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import org.json.JSONObject
 import org.json.JSONArray
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -31,7 +26,7 @@ class RootViewModel @Inject constructor(
     private val firebaseRepository: FirebaseRepository
 ) : ViewModel() {
 
-    // Listas completas
+    // Listas completas (Flows reactivos desde Room)
     val users: StateFlow<List<User>> = userRepository.getAllUsers()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
         
@@ -41,12 +36,12 @@ class RootViewModel @Inject constructor(
     val admins: StateFlow<List<User>> = userRepository.getAllAdmins()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // Estadísticas
-    private val _userCount = MutableStateFlow(0)
-    val userCount = _userCount.asStateFlow()
+    // Estadísticas Reactivas (Se actualizan automáticamente con la DB)
+    val userCount: StateFlow<Int> = users.map { it.size }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
     
-    private val _productCount = MutableStateFlow(0)
-    val productCount = _productCount.asStateFlow()
+    val productCount: StateFlow<Int> = productos.map { it.size }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     // Historial de Sincronización
     private val _syncHistory = MutableStateFlow<List<String>>(emptyList())
@@ -56,8 +51,6 @@ class RootViewModel @Inject constructor(
         // Inicializamos P2P y Firebase para el usuario Root
         p2pManager.initialize("root")
         firebaseRepository.initialize("root")
-        
-        refreshStats()
         
         // Observamos nuevos peers para sincronizar automáticamente (P2P)
         viewModelScope.launch {
@@ -71,16 +64,10 @@ class RootViewModel @Inject constructor(
             }
         }
     }
-    
-    fun refreshStats() {
-        viewModelScope.launch {
-            _userCount.value = userRepository.getUserCount()
-            _productCount.value = productoRepository.getProductCount()
-        }
-    }
 
     override fun onCleared() {
         super.onCleared()
+        // FIX: Llamar a tearDown para evitar fugas de memoria y sockets abiertos
         p2pManager.tearDown()
         firebaseRepository.cleanup()
     }
@@ -99,7 +86,6 @@ class RootViewModel @Inject constructor(
     // --- GESTIÓN USUARIOS ---
 
     fun crearAdmin(nombre: String, email: String, pass: String, onSuccess: () -> Unit, onError: () -> Unit) {
-        // Normalizamos el email para evitar errores de login
         val safeEmail = email.trim().lowercase()
         val safeName = nombre.trim()
         val safePass = pass.trim()
@@ -110,9 +96,7 @@ class RootViewModel @Inject constructor(
                 firebaseRepository.registerUser(newUser) // Sync to Cloud
                 
                 onSuccess()
-                refreshStats()
                 addToHistory("Creado nuevo admin: $safeEmail")
-                // Sincronizar cambios automáticamente
                 sincronizarDatosConAdmins()
             } else {
                 onError()
@@ -121,12 +105,20 @@ class RootViewModel @Inject constructor(
     }
     
     fun guardarUsuario(user: User, isNew: Boolean, onSuccess: () -> Unit, onError: () -> Unit) {
-        // Normalizamos datos antes de guardar
         val safeUser = user.copy(
             name = user.name.trim(),
             email = user.email.trim().lowercase(),
             passwordHash = user.passwordHash.trim()
         )
+        
+        if (!isNew && safeUser.role != "root") {
+             val existing = users.value.find { it.id == safeUser.id }
+             if (existing?.role == "root") {
+                 onError() 
+                 addToHistory("Intento fallido de modificar rol de ROOT.")
+                 return
+             }
+        }
         
         viewModelScope.launch {
             var success = false
@@ -146,18 +138,23 @@ class RootViewModel @Inject constructor(
             }
             
             if (success) {
-                firebaseRepository.registerUser(safeUser) // Sync to Cloud
-                refreshStats()
+                firebaseRepository.registerUser(safeUser)
                 sincronizarDatosConAdmins()
             }
         }
     }
 
     fun eliminarUsuario(userId: Int) {
+        val userToDelete = users.value.find { it.id == userId }
+        if (userToDelete != null) {
+            if (userToDelete.role == "root" || userToDelete.email == "root") {
+                addToHistory("⚠️ Acción bloqueada: No se puede eliminar al usuario ROOT.")
+                return
+            }
+        }
+        
         viewModelScope.launch {
-            // No implementamos borrado en cloud por seguridad, solo local
             userRepository.deleteUser(userId)
-            refreshStats()
             addToHistory("Usuario eliminado localmente (ID: $userId)")
             sincronizarDatosConAdmins()
         }
@@ -166,7 +163,6 @@ class RootViewModel @Inject constructor(
     fun eliminarTodosUsuariosNoRoot() {
         viewModelScope.launch {
             userRepository.nukeUsers()
-            refreshStats()
             addToHistory("Eliminados todos los usuarios no-root")
             sincronizarDatosConAdmins()
         }
@@ -177,19 +173,15 @@ class RootViewModel @Inject constructor(
     fun eliminarProducto(producto: Producto) {
         viewModelScope.launch {
              productoRepository.eliminarProducto(producto)
-             refreshStats()
+             firebaseRepository.deleteProduct(producto.id, producto.providerEmail)
              addToHistory("Producto eliminado: ${producto.nombre}")
              sincronizarDatosConAdmins()
-             
-             // Enviar señal de borrado a través de Firebase si fuera necesario
-             // firebaseRepository.deleteProduct(producto.id) // Placeholder
         }
     }
 
     // --- SINCRONIZACION ---
     fun sincronizarDatosConAdmins() {
         viewModelScope.launch {
-            // Obtenemos lista de peers conectados
             val peers = p2pManager.connectedPeers.value
             Log.d("RootViewModel", "Iniciando Sincronización. Peers encontrados: ${peers.size}")
             
@@ -203,33 +195,96 @@ class RootViewModel @Inject constructor(
             val currentUsers = userRepository.getAllUsersSync()
             val usersArray = JSONArray()
             currentUsers.forEach { u ->
+                if (u.role == "root") return@forEach
+
                 val json = JSONObject().apply {
                     put("name", u.name)
                     put("email", u.email)
                     put("role", u.role)
-                    put("passwordHash", u.passwordHash)
+                    // FIX SEGURIDAD: NO enviar passwordHash por P2P en texto plano.
                 }
                 usersArray.put(json)
                 
                 // Backup a la nube
-                if (u.role != "root") {
-                    firebaseRepository.registerUser(u)
-                }
+                firebaseRepository.registerUser(u)
             }
             
             val currentProducts = productoRepository.getAllProductosSync()
             val productsArray = JSONArray()
             currentProducts.forEach { p ->
+                var productToSend = p
+                
+                // INTENTO DE REPARACIÓN DE IMAGEN LOCAL ANTES DE SUBIR
+                // Si la imagen es local (no empieza con http), intentamos subirla a Firebase Storage
+                val uri = p.imagenUri
+                if (!uri.isNullOrBlank() && !uri.startsWith("http")) {
+                    var uploadSuccess = false
+                    try {
+                        var fileUri: Uri? = null
+                        
+                        if (uri.startsWith("/")) {
+                            val file = File(uri)
+                            if (file.exists()) fileUri = Uri.fromFile(file)
+                            else Log.e("RootViewModel", "Archivo local no encontrado: $uri")
+                        } 
+                        else if (uri.startsWith("file://")) {
+                            val path = uri.removePrefix("file://")
+                            val file = File(path)
+                            if (file.exists()) fileUri = Uri.fromFile(file)
+                            else Log.e("RootViewModel", "Archivo local (file://) no encontrado: $path")
+                        }
+                        else {
+                            fileUri = Uri.parse(uri)
+                        }
+
+                        if (fileUri != null) {
+                            val cloudUrl = firebaseRepository.uploadProductImage(fileUri)
+                            
+                            if (cloudUrl != null) {
+                                 // Actualizamos localmente para tener la URL remota y no re-subir
+                                 productToSend = p.copy(imagenUri = cloudUrl)
+                                 productoRepository.actualizarProducto(productToSend)
+                                 Log.d("RootViewModel", "Imagen local reparada y subida: $cloudUrl")
+                                 uploadSuccess = true
+                            } else {
+                                Log.w("RootViewModel", "Fallo al subir imagen local: $uri")
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e("RootViewModel", "Error al procesar imagen: $uri", e)
+                    }
+
+                    // LÓGICA STRICTA: Si sigue siendo local (falló subida), la eliminamos del objeto a enviar
+                    // para NO contaminar la nube ni a otros usuarios.
+                    if (!uploadSuccess) {
+                        Log.e("RootViewModel", "⚠️ SANEAMIENTO: Eliminando referencia local $uri antes de sincronizar.")
+                        productToSend = productToSend.copy(imagenUri = null)
+                    }
+                }
+                
                 val json = JSONObject().apply {
-                    put("id", p.id)
-                    put("nombre", p.nombre)
-                    put("precio", p.precioCLP)
-                    put("unidad", p.unidad)
-                    put("descripcion", p.descripcion)
-                    put("imagenRes", p.imagenRes)
-                    put("imagenUri", p.imagenUri)
+                    put("id", productToSend.id)
+                    put("nombre", productToSend.nombre)
+                    put("precio", productToSend.precioCLP)
+                    put("unidad", productToSend.unidad)
+                    put("descripcion", productToSend.descripcion)
+                    put("imagenRes", productToSend.imagenRes)
+                    put("imagenUri", productToSend.imagenUri)
+                    put("providerEmail", productToSend.providerEmail)
                 }
                 productsArray.put(json)
+                
+                // Sincronización Cloud: Root respalda TODOS los productos en la nube.
+                firebaseRepository.upsertProduct(
+                    productToSend.id, 
+                    productToSend.nombre, 
+                    productToSend.precioCLP, 
+                    productToSend.unidad, 
+                    productToSend.descripcion, 
+                    productToSend.imagenRes, 
+                    productToSend.imagenUri, 
+                    productToSend.providerEmail
+                )
             }
             
             // Sincronización LOCAL (P2P)
@@ -247,14 +302,6 @@ class RootViewModel @Inject constructor(
                 addToHistory("Datos enviados localmente a $peerEmail")
             }
             
-            // Sincronización CLOUD (Firebase)
-            // Aquí enviamos una señal de 'sync' a todos los administradores registrados via Firebase
-            // Para simplificar, subimos la configuración global a un documento 'config' o 'sync'
-            // que los admins escuchan.
-            
-            // Nota: La implementación completa de sync de productos via Firebase requeriría
-            // guardar la colección 'productos' en Firestore.
-            // Por ahora aseguramos que los usuarios estén sincronizados.
             addToHistory("Sincronización en la nube completada.")
         }
     }

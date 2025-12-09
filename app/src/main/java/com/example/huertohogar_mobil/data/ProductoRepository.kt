@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.Flow
 
 interface ProductoRepository {
     fun productos(): Flow<List<Producto>>
+    fun getProductosByProvider(providerEmail: String): Flow<List<Producto>>
     suspend fun getAllProductosSync(): List<Producto>
     suspend fun ensureSeeded()
     suspend fun agregarProducto(producto: Producto)

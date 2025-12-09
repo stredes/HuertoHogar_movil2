@@ -25,7 +25,8 @@ fun RootDashboardScreen(
     onNavigateCreate: () -> Unit,
     onNavigateUsers: () -> Unit,
     onNavigateProducts: () -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    onNavigateProviders: (() -> Unit)? = null // Agregado como opcional para evitar romper firma, aunque debería ser obligatorio
 ) {
     val userCount by viewModel.userCount.collectAsStateWithLifecycle()
     val productCount by viewModel.productCount.collectAsStateWithLifecycle()
@@ -53,6 +54,12 @@ fun RootDashboardScreen(
 
             HuertoButton(text = "Gestionar Usuarios", onClick = onNavigateUsers)
             HuertoButton(text = "Gestionar Productos", onClick = onNavigateProducts)
+            
+            // Nuevo botón para Proveedores
+            if (onNavigateProviders != null) {
+                HuertoButton(text = "Ver Proveedores", onClick = onNavigateProviders)
+            }
+            
             HuertoButton(text = "Crear Nuevo Usuario", onClick = onNavigateCreate)
             
             Spacer(modifier = Modifier.weight(1f))

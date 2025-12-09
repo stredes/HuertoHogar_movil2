@@ -70,7 +70,12 @@ fun ContactoScreen(
             text = "Enviar Mensaje",
             onClick = { 
                 if (name.isNotBlank() && email.isNotBlank() && message.isNotBlank()) {
-                    viewModel.enviarContacto(name, email, message)
+                    // FIX: Enviar siempre al Admin hardcoded, usando los datos del form como contenido
+                    val adminEmail = "admin@huertohogar.com"
+                    val fullMessage = "De: $name <$email>\n\n$message"
+                    
+                    viewModel.enviarContacto(name, adminEmail, fullMessage)
+                    
                     Toast.makeText(context, "Mensaje enviado correctamente", Toast.LENGTH_SHORT).show()
                     // Limpiar campos
                     name = ""

@@ -38,8 +38,17 @@ sealed class Routes(val route: String) {
     data object CreateAdmin : Routes("create_admin") // Mantenemos por compatibilidad, pero usaremos EditUser
     data object RootUsers : Routes("root_users")
     data object RootProducts : Routes("root_products")
+    data object RootProviders : Routes("root_providers")
+    data object RootProviderProducts : Routes("root_provider_products/{email}") {
+        fun create(email: String) = "root_provider_products/$email"
+        const val ARG_EMAIL = "email"
+    }
+    
     data object EditUser : Routes("edit_user?id={id}") {
         fun create(id: Int? = null) = if (id != null) "edit_user?id=$id" else "edit_user"
         const val ARG_ID = "id"
     }
+    
+    // Ruta Usuario
+    data object EditProfile : Routes("edit_profile")
 }

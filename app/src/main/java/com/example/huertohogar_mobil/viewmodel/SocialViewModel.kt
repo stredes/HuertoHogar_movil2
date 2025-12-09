@@ -57,6 +57,12 @@ class SocialViewModel @Inject constructor(
         .flatMapLatest { user -> socialDao.getAmigos(user.id) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // Nuevo: Chats Activos (Usuarios con los que se ha hablado, sean amigos o no)
+    val activeChats: StateFlow<List<User>> = _currentUser
+        .filterNotNull()
+        .flatMapLatest { user -> socialDao.getUsuariosConChat(user.id) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val solicitudesPendientes: StateFlow<List<Solicitud>> = _currentUser
         .filterNotNull()
         .flatMapLatest { user -> solicitudDao.getSolicitudesPendientes(user.email) }
@@ -266,7 +272,9 @@ class SocialViewModel @Inject constructor(
                     enviado = firebaseRepository.sendMessage(user, destinatario.email, texto, 
                                                             if (tipoContenido == TipoContenido.TEXTO) "CHAT" else tipoContenido)
                 }
-            } 
+            } else {
+                 Log.e(TAG, "No se encontró usuario destinatario con ID $destinatarioId para enviar mensaje")
+            }
             
             val estadoFinal = if (enviado) EstadoMensaje.ENVIADO else EstadoMensaje.ERROR
             socialDao.updateEstado(mensajeId, estadoFinal)

@@ -17,6 +17,10 @@ class RoomProductoRepository @Inject constructor(
             Log.d(TAG, "Recuperados ${list.size} productos de la BD Local")
         }
 
+    override fun getProductosByProvider(providerEmail: String): Flow<List<Producto>> {
+        return productoDao.getProductosByProvider(providerEmail)
+    }
+
     override suspend fun getAllProductosSync(): List<Producto> {
         return productoDao.getAllProductosSync()
     }

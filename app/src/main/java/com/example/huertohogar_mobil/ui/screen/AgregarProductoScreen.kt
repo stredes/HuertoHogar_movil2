@@ -37,6 +37,7 @@ import java.util.UUID
 fun AgregarProductoScreen(
     viewModel: MarketViewModel = hiltViewModel(),
     productoEditar: Producto? = null, // Si es null, es modo CREAR
+    currentUserEmail: String? = null, // Email del usuario actual para asignar autoría
     onBack: () -> Unit
 ) {
     // Inicializamos estados. Si hay productoEditar, usamos sus valores.
@@ -170,7 +171,8 @@ fun AgregarProductoScreen(
                                     unidad = unidad,
                                     desc = descripcion,
                                     uri = uriFinal,
-                                    originalImgRes = productoEditar.imagenRes
+                                    originalImgRes = productoEditar.imagenRes,
+                                    originalProviderEmail = productoEditar.providerEmail
                                 )
                             } else {
                                 viewModel.crearProducto(
@@ -178,7 +180,8 @@ fun AgregarProductoScreen(
                                     precio = precio.toIntOrNull() ?: 0,
                                     unidad = unidad,
                                     desc = descripcion,
-                                    uri = uriFinal
+                                    uri = uriFinal,
+                                    creatorEmail = currentUserEmail
                                 )
                             }
                             onBack()

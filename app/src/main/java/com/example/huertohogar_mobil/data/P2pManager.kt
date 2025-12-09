@@ -1,6 +1,8 @@
 package com.example.huertohogar_mobil.data
 
 import android.Manifest
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -15,19 +17,13 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.example.huertohogar_mobil.MainActivity
 import com.example.huertohogar_mobil.R
-import com.example.huertohogar_mobil.model.EstadoMensaje
-import com.example.huertohogar_mobil.model.MensajeChat
-import com.example.huertohogar_mobil.model.Solicitud
-import com.example.huertohogar_mobil.model.User
-import com.example.huertohogar_mobil.model.CarritoItem
+import com.example.huertohogar_mobil.model.*
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -35,15 +31,12 @@ import java.io.PrintWriter
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
-import org.json.JSONArray
-import com.example.huertohogar_mobil.model.Amistad
-import com.example.huertohogar_mobil.model.Producto
-import java.nio.charset.StandardCharsets
 
 @Singleton
 class P2pManager @Inject constructor(
@@ -57,6 +50,11 @@ class P2pManager @Inject constructor(
     private val TAG = "HuertoP2P"
     private val SERVICE_TYPE = "_huerto_chat._tcp."
     private var serviceName = "HuertoUser"
+    
+    // Configuración de Canales de Notificación
+    private val MSG_CHANNEL_ID = "HUERTO_MESSAGES_CHANNEL"
+    private val MSG_CHANNEL_NAME = "Mensajes y Alertas"
+
     private var nsdManager: NsdManager? = null
     private var registrationListener: NsdManager.RegistrationListener? = null
     private var discoveryListener: NsdManager.DiscoveryListener? = null
@@ -77,6 +75,22 @@ class P2pManager @Inject constructor(
 
     private val _connectedPeers = MutableStateFlow<Set<String>>(emptySet())
     val connectedPeers: StateFlow<Set<String>> = _connectedPeers.asStateFlow()
+
+    init {
+        createNotificationChannels()
+    }
+
+    private fun createNotificationChannels() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val importance = NotificationManager.IMPORTANCE_HIGH
+            val channel = NotificationChannel(MSG_CHANNEL_ID, MSG_CHANNEL_NAME, importance).apply {
+                description = "Notificaciones de nuevos mensajes y solicitudes de amistad"
+                enableVibration(true)
+            }
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.createNotificationChannel(channel)
+        }
+    }
 
     fun initialize(userEmail: String) {
         if (isInitialized) return
@@ -102,32 +116,12 @@ class P2pManager @Inject constructor(
     }
 
     fun pause() {
-        // No hacer nada en pause para mantener el servicio activo en segundo plano
-        // si se desea que la conexión persista al salir del chat.
-        // Opcionalmente, se puede mantener el Discovery activo pero detener la publicación,
-        // o mantener ambos.
-        // Si el usuario quiere que al cerrar el chat la conexión se pierda, entonces
-        // aquí se deben liberar recursos. Pero el usuario dice "una vez se cierra el chat la conexion se pierde",
-        // lo cual implica que quiere que NO se pierda o que al volver se recupere.
-        // El usuario dice "al hacer refresh la conexion tampoco vuelve".
-        // Esto sugiere que al volver a entrar o al refrescar, el Discovery no se reinicia correctamente.
-        
-        // Comentamos la detención de servicios en pause para mantener la conexión viva
-        // mientras la app esté en memoria. O mejor, manejamos el ciclo de vida en el ViewModel/Activity principal
-        // y no por pantalla.
-        
-        // Sin embargo, si la llamada a pause() viene de onStop() de la Activity principal, 
-        // entonces sí tiene sentido liberar recursos para no gastar batería.
-        // Pero si el refresh no funciona, es porque al llamar a resume() algo falla o no limpia el estado anterior.
-        
         try {
-            // Liberamos el lock pero mantenemos el servicio si es posible, o limpiamos todo bien.
-            multicastLock?.takeIf { it.isHeld }?.release()
-            
-            // Detener descubrimiento y registro limpiamente
+            if (multicastLock?.isHeld == true) {
+                multicastLock?.release()
+            }
             stopDiscoveryInternal()
             stopRegistrationInternal()
-            
         } catch (e: Exception) {
             Log.e(TAG, "Error al pausar P2P", e)
         }
@@ -137,8 +131,9 @@ class P2pManager @Inject constructor(
         if (!isInitialized || localPort == 0) return
         CoroutineScope(Dispatchers.Main).launch {
             try {
-                multicastLock?.takeIf { !it.isHeld }?.acquire()
-                // Reiniciar servicios si no están activos
+                if (multicastLock?.isHeld == false) {
+                    multicastLock?.acquire()
+                }
                 if (registrationListener == null) registerService(localPort)
                 if (discoveryListener == null) startDiscovery()
             } catch (e: Exception) {
@@ -149,14 +144,14 @@ class P2pManager @Inject constructor(
     
     private fun stopDiscoveryInternal() {
         discoveryListener?.let { 
-            try { nsdManager?.stopServiceDiscovery(it) } catch(e: Exception) { Log.e(TAG, "Error stopping discovery", e) }
+            try { nsdManager?.stopServiceDiscovery(it) } catch(e: Exception) { Log.w(TAG, "Error stopping discovery: ${e.message}") }
         }
         discoveryListener = null
     }
 
     private fun stopRegistrationInternal() {
         registrationListener?.let { 
-            try { nsdManager?.unregisterService(it) } catch(e: Exception) { Log.e(TAG, "Error unregistering service", e) }
+            try { nsdManager?.unregisterService(it) } catch(e: Exception) { Log.w(TAG, "Error unregistering service: ${e.message}") }
         }
         registrationListener = null
     }
@@ -169,7 +164,8 @@ class P2pManager @Inject constructor(
             CoroutineScope(Dispatchers.IO).launch {
                 while (serverSocket?.isClosed == false) {
                     try {
-                        serverSocket?.accept()?.let { handleIncomingMessage(it) }
+                        val socket = serverSocket?.accept()
+                        socket?.let { handleIncomingMessage(it) }
                     } catch (e: Exception) {
                         if (serverSocket?.isClosed == false) {
                             Log.e(TAG, "Error aceptando conexión", e)
@@ -185,6 +181,8 @@ class P2pManager @Inject constructor(
     private fun handleIncomingMessage(socket: Socket) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
+                socket.soTimeout = 10000 
+                
                 val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
                 val jsonStr = reader.readLine() ?: return@launch
                 
@@ -195,7 +193,7 @@ class P2pManager @Inject constructor(
                 val receiverEmail = json.getString("receiverEmail")
                 
                 var sender = userDao.getUserByEmail(senderEmail)
-                // Si es un usuario desconocido pero valido, lo registramos temporalmente para que funcione el chat
+                
                 if (sender == null) {
                     val newUser = User(name = senderName, email = senderEmail, passwordHash = "p2p_guest")
                     userDao.insertUser(newUser)
@@ -213,15 +211,9 @@ class P2pManager @Inject constructor(
                                 showNewMessageNotification(sender, content)
                             }
                         }
-                        "FRIEND_REQUEST" -> {
-                             handleFriendRequest(senderName, senderEmail, receiverEmail)
-                        }
-                        "REQUEST_ACCEPTED" -> {
-                             handleRequestAccepted(sender, receiverEmail)
-                        }
-                        "SYNC_REQUEST" -> {
-                            handleSyncRequest(sender, receiverEmail)
-                        }
+                        "FRIEND_REQUEST" -> handleFriendRequest(senderName, senderEmail, receiverEmail)
+                        "REQUEST_ACCEPTED" -> handleRequestAccepted(sender, receiverEmail)
+                        "SYNC_REQUEST" -> handleSyncRequest(sender, receiverEmail)
                         "SYNC_RESPONSE" -> {
                             val chats = json.optJSONArray("chats")
                             val cart = json.optJSONArray("cart")
@@ -233,6 +225,7 @@ class P2pManager @Inject constructor(
                         "UPSERT_PRODUCT" -> {
                              val productJson = json.getJSONObject("product")
                              handleProductUpsert(productJson)
+                             showNotification("Catálogo Actualizado", "Nuevo producto disponible de $senderName")
                         }
                         "DELETE_PRODUCT" -> {
                              val productId = json.getString("productId")
@@ -243,57 +236,38 @@ class P2pManager @Inject constructor(
             } catch (e: Exception) {
                 Log.e(TAG, "Error procesando mensaje entrante", e)
             } finally {
-                socket.close()
+                try { socket.close() } catch (e: Exception) { Log.e(TAG, "Error cerrando socket", e) }
             }
         }
     }
 
     private suspend fun handleFriendRequest(senderName: String, senderEmail: String, receiverEmail: String) {
-        Log.d(TAG, "🔔 Procesando solicitud de amistad: De $senderEmail Para $receiverEmail")
         val existing = solicitudDao.getSolicitud(senderEmail, receiverEmail)
         if (existing == null) {
-            val solicitud = Solicitud(
-                senderName = senderName,
-                senderEmail = senderEmail,
-                receiverEmail = receiverEmail,
-                estado = "PENDIENTE"
-            )
+            val solicitud = Solicitud(senderName = senderName, senderEmail = senderEmail, receiverEmail = receiverEmail, estado = "PENDIENTE")
             solicitudDao.insertSolicitud(solicitud)
             showNotification("Nueva solicitud de amistad", "$senderName quiere ser tu amigo")
-            Log.d(TAG, "✅ Solicitud guardada en BD")
-        } else {
-            Log.d(TAG, "⚠️ Solicitud ya existente o procesada")
         }
     }
 
     private suspend fun handleRequestAccepted(sender: User, myEmail: String) {
         val me = userDao.getUserByEmail(myEmail) ?: return
-        
-        // Verificar si ya somos amigos
-        // La query en SocialDao es algo compleja, pero podemos insertar y usar IGNORE
         socialDao.agregarAmigo(Amistad(me.id, sender.id))
         socialDao.agregarAmigo(Amistad(sender.id, me.id))
-        
         showNotification("Solicitud Aceptada", "${sender.name} aceptó tu solicitud de amistad")
     }
 
     private suspend fun handleSyncRequest(requester: User, myEmail: String) {
          val me = userDao.getUserByEmail(myEmail) ?: return
-         
-         // Verificamos si soy yo mismo en otro dispositivo
          val isSelf = requester.email == me.email
-
          val chatsArray = JSONArray()
          
          if (isSelf) {
-             // Si soy yo, sincronizo TODO el historial de chats (Backup)
              val usersMap = userDao.getAllUsersSync().associateBy { it.id }
              val allMessages = socialDao.getAllMensajesSync()
-             
              allMessages.forEach { msg ->
                  val senderUser = usersMap[msg.remitenteId]
                  val receiverUser = usersMap[msg.destinatarioId]
-                 
                  if (senderUser != null && receiverUser != null) {
                      val msgJson = JSONObject().apply {
                          put("content", msg.contenido)
@@ -308,7 +282,6 @@ class P2pManager @Inject constructor(
                  }
              }
          } else {
-             // Si es un amigo, solo sincronizo NUESTRA conversacion
              val mensajes = socialDao.getConversacionSync(me.id, requester.id)
              mensajes.forEach { msg ->
                  val msgJson = JSONObject().apply {
@@ -322,7 +295,6 @@ class P2pManager @Inject constructor(
          
          val cartArray = JSONArray()
          if (isSelf) {
-             // Enviar items del carrito
              val items = carritoDao.getCarritoSync()
              items.forEach { item ->
                  val itemJson = JSONObject().apply {
@@ -339,9 +311,7 @@ class P2pManager @Inject constructor(
              put("senderEmail", me.email)
              put("receiverEmail", requester.email)
              put("chats", chatsArray)
-             if (cartArray.length() > 0) {
-                 put("cart", cartArray)
-             }
+             if (cartArray.length() > 0) put("cart", cartArray)
          }
          
          sendMessageJson(requester.email, responseJson)
@@ -349,53 +319,29 @@ class P2pManager @Inject constructor(
 
     private suspend fun handleSyncResponse(sender: User, chats: JSONArray?, cart: JSONArray?) {
         val me = currentUserEmail?.let { userDao.getUserByEmail(it) } ?: return
-
-        // Procesar carrito
         if (cart != null && cart.length() > 0) {
             for (i in 0 until cart.length()) {
                 val itemJson = cart.getJSONObject(i)
-                val pId = itemJson.getString("productId")
-                val qty = itemJson.getInt("qty")
-                carritoDao.insertItem(CarritoItem(pId, qty))
+                carritoDao.insertItem(CarritoItem(itemJson.getString("productId"), itemJson.getInt("qty")))
             }
         }
-
-        // Procesar chats
         if (chats != null) {
             for (i in 0 until chats.length()) {
                 val chatJson = chats.getJSONObject(i)
-                
                 val isFullSync = chatJson.optBoolean("isFullSync", false)
                 val content = chatJson.getString("content")
                 val timestamp = chatJson.getLong("timestamp")
-                
                 var remitenteId = 0
                 var destinatarioId = 0
-                
                 if (isFullSync) {
-                    val senderEmailMsg = chatJson.getString("senderEmail")
-                    val senderNameMsg = chatJson.getString("senderName")
-                    val receiverEmailMsg = chatJson.getString("receiverEmail")
-                    val receiverNameMsg = chatJson.optString("receiverName", "User")
-                    
-                    remitenteId = resolveUserId(senderEmailMsg, senderNameMsg)
-                    destinatarioId = resolveUserId(receiverEmailMsg, receiverNameMsg)
+                    remitenteId = resolveUserId(chatJson.getString("senderEmail"), chatJson.getString("senderName"))
+                    destinatarioId = resolveUserId(chatJson.getString("receiverEmail"), chatJson.optString("receiverName", "User"))
                 } else {
-                    // Friend Sync Logic
                     remitenteId = if (chatJson.getBoolean("isFromMe")) sender.id else me.id
                     destinatarioId = if (chatJson.getBoolean("isFromMe")) me.id else sender.id
                 }
-                
-                val exists = socialDao.existeMensaje(remitenteId, destinatarioId, timestamp, content)
-                if (!exists) {
-                     val msg = MensajeChat(
-                         remitenteId = remitenteId,
-                         destinatarioId = destinatarioId,
-                         contenido = content,
-                         timestamp = timestamp,
-                         estado = EstadoMensaje.LEIDO 
-                     )
-                     socialDao.insertMensaje(msg)
+                if (!socialDao.existeMensaje(remitenteId, destinatarioId, timestamp, content)) {
+                     socialDao.insertMensaje(MensajeChat(remitenteId = remitenteId, destinatarioId = destinatarioId, contenido = content, timestamp = timestamp, estado = EstadoMensaje.LEIDO))
                 }
             }
         }
@@ -404,15 +350,13 @@ class P2pManager @Inject constructor(
     private suspend fun resolveUserId(email: String, name: String): Int {
         var user = userDao.getUserByEmail(email)
         if (user == null) {
-            val newUser = User(name = name, email = email, passwordHash = "imported")
-            userDao.insertUser(newUser)
+            userDao.insertUser(User(name = name, email = email, passwordHash = "imported"))
             user = userDao.getUserByEmail(email)
         }
         return user?.id ?: 0
     }
     
     private suspend fun handleAdminSyncData(usersArray: JSONArray?, productsArray: JSONArray?, senderEmail: String) {
-        // Sync Usuarios
         if (usersArray != null) {
             val incomingEmails = mutableSetOf<String>()
             for (i in 0 until usersArray.length()) {
@@ -420,88 +364,67 @@ class P2pManager @Inject constructor(
                 val email = userJson.getString("email")
                 val name = userJson.getString("name")
                 val role = userJson.getString("role")
-                val hash = userJson.getString("passwordHash")
-                
                 incomingEmails.add(email)
                 
                 val existing = userDao.getUserByEmail(email)
                 if (existing == null) {
-                    userDao.insertUser(User(name = name, email = email, role = role, passwordHash = hash))
-                    Log.d(TAG, "Sincronizado usuario nuevo: $email")
+                    userDao.insertUser(User(name = name, email = email, role = role, passwordHash = "p2p_synced"))
                 } else {
-                    // FORCE UPDATE to ensure password persistence regardless of current state
-                    val updatedUser = existing.copy(role = role, name = name, passwordHash = hash)
+                    val updatedUser = existing.copy(role = role, name = name)
                     userDao.insertUser(updatedUser)
-                    Log.d(TAG, "Usuario actualizado (Force Update): $email con hash de longitud ${hash.length}")
                 }
             }
-            
-            // Eliminar usuarios locales SOLO si el sender es ROOT
             if (senderEmail == "root") {
                 val localUsers = userDao.getAllUsersSync()
                 for (user in localUsers) {
-                    if (user.role != "root" && user.email !in incomingEmails) {
-                        userDao.deleteUser(user.id)
-                        Log.d(TAG, "🗑️ Usuario eliminado por sync de ROOT: ${user.email}")
-                    }
+                    if (user.role != "root" && user.email !in incomingEmails) userDao.deleteUser(user.id)
                 }
             }
         }
         
-        // Sync Productos
         if (productsArray != null) {
             val incomingIds = mutableSetOf<String>()
             for (i in 0 until productsArray.length()) {
                 val prodJson = productsArray.getJSONObject(i)
                 val id = prodJson.getString("id")
-                val nombre = prodJson.getString("nombre")
-                val precio = prodJson.getInt("precio")
-                val unidad = prodJson.getString("unidad")
-                val desc = prodJson.getString("descripcion")
-                val imgRes = prodJson.getInt("imagenRes")
-                val imgUri = prodJson.optString("imagenUri").takeIf { it.isNotEmpty() && it != "null" }
-                
+                val product = Producto(
+                    id, 
+                    prodJson.getString("nombre"), 
+                    prodJson.getInt("precio"), 
+                    prodJson.getString("unidad"), 
+                    prodJson.getString("descripcion"), 
+                    prodJson.getInt("imagenRes"), 
+                    prodJson.optString("imagenUri").takeIf { it.isNotEmpty() && it != "null" }, 
+                    prodJson.optString("providerEmail", "")
+                )
                 incomingIds.add(id)
-                
-                val product = Producto(id, nombre, precio, unidad, desc, imgRes, imgUri)
                 productoDao.insert(product)
-                Log.d(TAG, "Sincronizado producto: $nombre")
             }
-            
-            // Eliminar productos locales SOLO si el sender es ROOT
             if (senderEmail == "root") {
                 val localProducts = productoDao.getAllProductosSync()
                 for (prod in localProducts) {
-                    if (prod.id !in incomingIds) {
-                        productoDao.delete(prod)
-                        Log.d(TAG, "🗑️ Producto eliminado por sync de ROOT: ${prod.nombre}")
-                    }
+                    if (prod.id !in incomingIds) productoDao.delete(prod)
                 }
             }
         }
     }
     
     private suspend fun handleProductUpsert(prodJson: JSONObject) {
-        val id = prodJson.getString("id")
-        val nombre = prodJson.getString("nombre")
-        val precio = prodJson.getInt("precio")
-        val unidad = prodJson.getString("unidad")
-        val desc = prodJson.getString("descripcion")
-        val imgRes = prodJson.getInt("imagenRes")
-        val imgUri = prodJson.optString("imagenUri").takeIf { it.isNotEmpty() && it != "null" }
-        
-        val product = Producto(id, nombre, precio, unidad, desc, imgRes, imgUri)
+        val product = Producto(
+            prodJson.getString("id"),
+            prodJson.getString("nombre"),
+            prodJson.getInt("precio"),
+            prodJson.getString("unidad"),
+            prodJson.getString("descripcion"),
+            prodJson.getInt("imagenRes"),
+            prodJson.optString("imagenUri").takeIf { it.isNotEmpty() && it != "null" },
+            prodJson.optString("providerEmail", "")
+        )
         productoDao.insert(product)
-        Log.d(TAG, "📦 Producto recibido (Upsert): $nombre")
     }
     
     private suspend fun handleProductDelete(productId: String) {
-        val allProducts = productoDao.getAllProductosSync()
-        val target = allProducts.find { it.id == productId }
-        if (target != null) {
-            productoDao.delete(target)
-            Log.d(TAG, "🗑️ Producto eliminado (Delete Event): ${target.nombre}")
-        }
+        productoDao.getProductoByIdSync(productId)?.let { productoDao.delete(it) }
     }
 
     private suspend fun sendMessageJson(receiverEmail: String, json: JSONObject): Boolean {
@@ -512,6 +435,7 @@ class P2pManager @Inject constructor(
         return withContext(Dispatchers.IO) {
             try {
                 Socket(targetIp, targetPort).use { socket ->
+                    socket.soTimeout = 5000
                     PrintWriter(socket.getOutputStream(), true).use { writer ->
                         writer.println(json.toString())
                     }
@@ -523,18 +447,38 @@ class P2pManager @Inject constructor(
             }
         }
     }
+    
+    suspend fun sendMessageJsonDirect(receiverEmail: String, json: JSONObject) = sendMessageJson(receiverEmail, json)
 
-    private fun showNewMessageNotification(sender: User, content: String) {
-        showNotification(sender.name, content)
+    suspend fun sendMessage(senderName: String, senderEmail: String, receiverEmail: String, content: String, type: String = "CHAT"): Boolean {
+        val json = JSONObject().apply {
+            put("type", type)
+            put("senderName", senderName)
+            put("senderEmail", senderEmail)
+            put("receiverEmail", receiverEmail)
+            put("content", content)
+            put("timestamp", System.currentTimeMillis())
+        }
+        return sendMessageJson(receiverEmail, json)
     }
+
+    private fun showNewMessageNotification(sender: User, content: String) = showNotification("Nuevo mensaje de ${sender.name}", content)
     
     private fun showNotification(title: String, content: String) {
-        val builder = NotificationCompat.Builder(context, "HUERTO_CHANNEL_ID")
+        // Crear Intent para abrir la Activity principal al tocar la notificación
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        val pendingIntent: PendingIntent = PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_IMMUTABLE)
+
+        val builder = NotificationCompat.Builder(context, MSG_CHANNEL_ID)
             .setSmallIcon(R.drawable.icono)
             .setContentTitle(title)
             .setContentText(content)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setContentIntent(pendingIntent) // Acción al tocar
+            .setAutoCancel(true) // Desaparece al tocar
 
         if (ActivityCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
             NotificationManagerCompat.from(context).notify(System.currentTimeMillis().toInt(), builder.build())
@@ -547,11 +491,8 @@ class P2pManager @Inject constructor(
                 serviceName = this@P2pManager.serviceName
                 serviceType = SERVICE_TYPE
                 setPort(port)
-                // ADDED: Set attributes for robust email discovery
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                    currentUserEmail?.let { email ->
-                         setAttribute("email", email)
-                    }
+                    currentUserEmail?.let { email -> setAttribute("email", email) }
                 }
             }
             registrationListener = object : NsdManager.RegistrationListener { 
@@ -561,9 +502,7 @@ class P2pManager @Inject constructor(
                 override fun onUnregistrationFailed(info: NsdServiceInfo, code: Int) {}
             }
             nsdManager?.registerService(serviceInfo, NsdManager.PROTOCOL_DNS_SD, registrationListener)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error registrando servicio", e)
-        }
+        } catch (e: Exception) { Log.e(TAG, "Error registrando servicio", e) }
     }
 
     private fun startDiscovery() {
@@ -576,16 +515,8 @@ class P2pManager @Inject constructor(
                     processPendingResolutions()
                 }
                 override fun onServiceLost(service: NsdServiceInfo) {
-                     // Check attributes if available, otherwise parse name
-                     // Note: serviceLost usually doesn't give attributes. We have to rely on name map or remove all matches?
-                     // But simpler: just remove by name parsing as fallback or iterate discoveredUsers
-                     
                      val cleanName = service.serviceName.replace(Regex("\\s*\\(\\d+\\)$"), "")
                      val email = cleanName.replace("Huerto-", "").replace("-at-", "@").replace("-dot-", ".")
-                     
-                     // Also check our map if we stored it differently? 
-                     // For now, removing by parsed email is the best bet since we can't get attributes here.
-                     
                      discoveredUsers.remove(email)
                      discoveredServicesPorts.remove(email)
                      updateConnectedPeers()
@@ -595,15 +526,12 @@ class P2pManager @Inject constructor(
                 override fun onStopDiscoveryFailed(type: String, code: Int) {}
             }
             nsdManager?.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, discoveryListener)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error iniciando descubrimiento", e)
-        }
+        } catch (e: Exception) { Log.e(TAG, "Error iniciando descubrimiento", e) }
     }
 
     private fun processPendingResolutions() {
         if (isResolving.getAndSet(true)) return
         val service = pendingResolutionQueue.poll() ?: run { isResolving.set(false); return }
-        
         nsdManager?.resolveService(service, object : NsdManager.ResolveListener {
             override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
                 isResolving.set(false)
@@ -611,30 +539,22 @@ class P2pManager @Inject constructor(
             }
             override fun onServiceResolved(serviceInfo: NsdServiceInfo) {
                 try {
-                    // Try to get email from attributes first (Robust method)
                     var email: String? = null
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                         val attrs = serviceInfo.attributes
                         if (attrs != null && attrs.containsKey("email")) {
-                            val bytes = attrs["email"]
-                            if (bytes != null) {
-                                email = String(bytes, StandardCharsets.UTF_8)
-                            }
+                            attrs["email"]?.let { email = String(it, StandardCharsets.UTF_8) }
                         }
                     }
-                    
-                    // Fallback to name parsing
                     if (email == null) {
                         val cleanName = serviceInfo.serviceName.replace(Regex("\\s*\\(\\d+\\)$"), "")
                         email = cleanName.replace("Huerto-", "").replace("-at-", "@").replace("-dot-", ".")
                     }
-
                     if (email != null) {
                         serviceInfo.host?.let { 
                             discoveredUsers[email!!] = it
                             discoveredServicesPorts[email!!] = serviceInfo.port
                             updateConnectedPeers()
-                            Log.d(TAG, "Peer resuelto: $email @ ${it.hostAddress}:${serviceInfo.port}")
                         }
                     }
                 } finally {
@@ -645,95 +565,36 @@ class P2pManager @Inject constructor(
         })
     }
 
-    private fun updateConnectedPeers() {
-        _connectedPeers.value = discoveredUsers.keys.toSet()
-    }
-
-    suspend fun sendMessage(senderName: String, senderEmail: String, receiverEmail: String, content: String, type: String = "CHAT"): Boolean {
-        val targetIp = discoveredUsers[receiverEmail]
-        val targetPort = discoveredServicesPorts[receiverEmail]
-        
-        if (targetIp == null || targetPort == null) {
-            Log.w(TAG, "❌ Intento de envío fallido a $receiverEmail. Usuario no descubierto.")
-            return false
-        }
-
-        return withContext(Dispatchers.IO) {
-            try {
-                Socket(targetIp, targetPort).use { socket ->
-                    PrintWriter(socket.getOutputStream(), true).use { writer ->
-                        val json = JSONObject().apply {
-                            put("type", type)
-                            put("senderName", senderName)
-                            put("senderEmail", senderEmail)
-                            put("receiverEmail", receiverEmail)
-                            put("content", content)
-                            put("timestamp", System.currentTimeMillis())
-                        }
-                        writer.println(json.toString())
-                    }
-                }
-                Log.d(TAG, "✅ Mensaje enviado a $receiverEmail (Tipo: $type)")
-                true
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ Error enviando mensaje P2P a $receiverEmail", e)
-                false
-            }
-        }
-    }
-    
-    // Nueva función pública para enviar JSON directo (usada por RootViewModel)
-    suspend fun sendMessageJsonDirect(receiverEmail: String, json: JSONObject): Boolean {
-        return sendMessageJson(receiverEmail, json)
-    }
-    
-    fun tearDown() {
-        try {
-            pause()
-            serverSocket?.close()
-            isInitialized = false
-        } catch (e: Exception) {
-            Log.e(TAG, "Error en tearDown", e)
-        }
-    }
+    private fun updateConnectedPeers() { _connectedPeers.value = discoveredUsers.keys.toSet() }
 
     fun solicitarSincronizacion(peerEmail: String) {
         val myEmail = currentUserEmail ?: return
-        
         CoroutineScope(Dispatchers.IO).launch {
-             val myUser = userDao.getUserByEmail(myEmail) 
-             if (myUser != null) {
-                 sendMessage(
-                     senderName = myUser.name,
-                     senderEmail = myEmail,
-                     receiverEmail = peerEmail,
-                     content = "SYNC",
-                     type = "SYNC_REQUEST"
-                 )
+             userDao.getUserByEmail(myEmail)?.let {
+                 sendMessage(it.name, myEmail, peerEmail, "SYNC", "SYNC_REQUEST")
              }
         }
     }
 
     fun restartDiscovery() {
         CoroutineScope(Dispatchers.Main).launch {
-            try {
-                // 1. Detener el descubrimiento actual de forma segura
-                discoveryListener?.let { 
-                    try { nsdManager?.stopServiceDiscovery(it) } catch(e: Exception) { Log.e(TAG, "Stop discovery error", e) }
-                }
-                discoveryListener = null
-                
-                // 2. Limpiar cache local de usuarios
-                discoveredUsers.clear()
-                discoveredServicesPorts.clear()
-                updateConnectedPeers()
-                
-                // 3. Reiniciar el descubrimiento
-                startDiscovery()
-                Log.d(TAG, "🔄 Discovery reiniciado manualmente")
-            } catch (e: Exception) {
-                Log.e(TAG, "Error reiniciando descubrimiento", e)
-            }
+            stopDiscoveryInternal()
+            discoveredUsers.clear()
+            discoveredServicesPorts.clear()
+            updateConnectedPeers()
+            startDiscovery()
         }
+    }
+
+    fun tearDown() {
+        try {
+            stopDiscoveryInternal()
+            stopRegistrationInternal()
+            try { serverSocket?.close() } catch (e: Exception) { Log.e(TAG, "Error closing server socket", e) }
+            serverSocket = null
+            try { if (multicastLock?.isHeld == true) multicastLock?.release() } catch (e: Exception) { Log.e(TAG, "Error releasing multicast lock", e) }
+            isInitialized = false
+            Log.d(TAG, "P2P Manager destroyed and resources released.")
+        } catch (e: Exception) { Log.e(TAG, "Error en tearDown", e) }
     }
 }

@@ -65,7 +65,8 @@ fun AdminNotificacionesScreen(
                     MensajeItem(
                         mensaje = mensaje,
                         onMarcar = { viewModel.marcarComoRespondido(mensaje.id, mensaje.respondido) },
-                        onEliminar = { viewModel.eliminarMensaje(mensaje) }
+                        onEliminar = { viewModel.eliminarMensaje(mensaje) },
+                        onAceptar = { viewModel.aceptarSolicitud(mensaje) }
                     )
                 }
             }

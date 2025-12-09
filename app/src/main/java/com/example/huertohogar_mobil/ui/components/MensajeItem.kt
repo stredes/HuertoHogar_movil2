@@ -1,16 +1,13 @@
 package com.example.huertohogar_mobil.ui.components
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Done
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.huertohogar_mobil.model.MensajeContacto
 
@@ -18,7 +15,8 @@ import com.example.huertohogar_mobil.model.MensajeContacto
 fun MensajeItem(
     mensaje: MensajeContacto,
     onMarcar: (Boolean) -> Unit,
-    onEliminar: () -> Unit
+    onEliminar: () -> Unit,
+    onAceptar: () -> Unit // Nuevo callback
 ) {
     Card(
         modifier = Modifier
@@ -39,6 +37,19 @@ fun MensajeItem(
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(text = mensaje.mensaje, style = MaterialTheme.typography.bodyMedium)
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            // Botón Aceptar
+            Button(
+                onClick = onAceptar,
+                modifier = Modifier.align(Alignment.End),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary
+                )
+            ) {
+                Text("Aceptar")
+            }
         }
     }
 }

@@ -17,6 +17,14 @@ interface SocialDao {
         WHERE a.usuarioId = :miId
     """)
     fun getAmigos(miId: Int): Flow<List<User>>
+    
+    // Nueva query para obtener usuarios con los que existe conversación (independiente de amistad)
+    @Query("""
+        SELECT DISTINCT u.* FROM users u
+        INNER JOIN mensajes_chat m ON (u.id = m.remitenteId OR u.id = m.destinatarioId)
+        WHERE (m.remitenteId = :miId OR m.destinatarioId = :miId) AND u.id != :miId
+    """)
+    fun getUsuariosConChat(miId: Int): Flow<List<User>>
 
     @Query("""
         SELECT * FROM users 
@@ -28,6 +36,9 @@ interface SocialDao {
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun agregarAmigo(amistad: Amistad)
+
+    @Query("SELECT EXISTS(SELECT 1 FROM amistades WHERE usuarioId = :miId AND amigoId = :otroId)")
+    suspend fun esAmigo(miId: Int, otroId: Int): Boolean
 
     // --- CHAT ---
 
@@ -71,4 +82,10 @@ interface SocialDao {
         )
     """)
     suspend fun existeMensaje(remitenteId: Int, destinatarioId: Int, timestamp: Long, contenido: String): Boolean
+
+    @Query("SELECT * FROM mensajes_chat ORDER BY timestamp DESC LIMIT 1")
+    suspend fun getLatestMessage(): MensajeChat?
+
+    @Query("SELECT timestamp FROM mensajes_chat ORDER BY timestamp DESC LIMIT 1")
+    suspend fun getLastMessageTimestamp(): Long?
 }

@@ -2,6 +2,8 @@ package com.example.huertohogar_mobil.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.huertohogar_mobil.data.FirebaseRepository
+import com.example.huertohogar_mobil.data.SessionManager
 import com.example.huertohogar_mobil.data.UserRepository
 import com.example.huertohogar_mobil.model.User
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -20,11 +22,37 @@ data class AuthUiState(
 
 @HiltViewModel
 class AuthViewModel @Inject constructor(
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val firebaseRepository: FirebaseRepository,
+    private val sessionManager: SessionManager
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(AuthUiState())
+    // Inicializamos el estado verificando síncronamente si hay sesión guardada para mostrar Loading de inmediato
+    private val _uiState = MutableStateFlow(
+        if (!sessionManager.getUserEmail().isNullOrBlank()) {
+            AuthUiState(isLoading = true)
+        } else {
+            AuthUiState(isLoading = false)
+        }
+    )
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
+
+    init {
+        val savedEmail = sessionManager.getUserEmail()
+        if (!savedEmail.isNullOrBlank()) {
+            viewModelScope.launch {
+                val user = userRepository.getUser(savedEmail)
+                if (user != null) {
+                    _uiState.update { it.copy(user = user, isLoading = false) }
+                    firebaseRepository.initialize(user.email)
+                } else {
+                    // Si el usuario guardado no existe (eliminado?), limpiamos sesión
+                    sessionManager.clearSession()
+                    _uiState.update { it.copy(isLoading = false) }
+                }
+            }
+        }
+    }
 
     fun register(name: String, email: String, passwordHash: String) {
         // Limpiamos los datos: quitamos espacios y normalizamos el email
@@ -36,6 +64,12 @@ class AuthViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true, error = null) }
             val success = userRepository.registerUser(safeName, safeEmail, safePassword)
             if (success) {
+                // Registrar también en Firebase para sincronización
+                val user = userRepository.getUser(safeEmail)
+                if (user != null) {
+                    firebaseRepository.registerUser(user)
+                }
+                
                 // Intentamos loguear automáticamente con las credenciales limpias
                 login(safeEmail, safePassword)
             } else {
@@ -52,15 +86,52 @@ class AuthViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true, error = null) }
             val user = userRepository.loginUser(safeEmail, safePassword)
             if (user != null) {
+                sessionManager.saveUserSession(safeEmail) // Guardamos sesión
                 _uiState.update { it.copy(user = user, isLoading = false) }
+                firebaseRepository.initialize(user.email)
             } else {
                 _uiState.update { it.copy(isLoading = false, error = "Credenciales inválidas") }
             }
         }
     }
+    
+    fun verifyEmail(email: String, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val exists = userRepository.verifyUserExists(email.trim().lowercase())
+            onResult(exists)
+        }
+    }
+
+    fun resetPassword(email: String, newPass: String, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val success = userRepository.resetPassword(email.trim().lowercase(), newPass.trim())
+            if (success) {
+                val user = userRepository.getUser(email.trim().lowercase())
+                if (user != null) {
+                    firebaseRepository.registerUser(user)
+                }
+            }
+            onResult(success)
+        }
+    }
+    
+    fun updateUserProfile(user: User, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            try {
+                userRepository.updateUser(user)
+                _uiState.update { it.copy(user = user) } // Actualizar estado local
+                firebaseRepository.registerUser(user) // Actualizar en Firebase
+                onResult(true)
+            } catch (e: Exception) {
+                onResult(false)
+            }
+        }
+    }
 
     fun logout() {
+        sessionManager.clearSession() // Borramos sesión
         _uiState.update { it.copy(user = null) }
+        firebaseRepository.cleanup()
     }
     
     fun clearError() {

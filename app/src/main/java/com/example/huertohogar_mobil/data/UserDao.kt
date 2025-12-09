@@ -16,6 +16,13 @@ interface UserDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertUser(user: User)
     
+    @Update
+    suspend fun updateUser(user: User)
+
+    // SAFE UPDATE: Actualiza por email sin reemplazar (evitando borrar ID y mensajes en cascada)
+    @Query("UPDATE users SET name = :name, passwordHash = :passwordHash, role = :role WHERE email = :email COLLATE NOCASE")
+    suspend fun updateUserByEmail(name: String, email: String, passwordHash: String, role: String): Int
+    
     // FIX: Añadido COLLATE NOCASE para que el login no sea sensible a mayúsculas en el email
     @Query("SELECT * FROM users WHERE email = :email COLLATE NOCASE AND passwordHash = :password LIMIT 1")
     suspend fun login(email: String, password: String): User?

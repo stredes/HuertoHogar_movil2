@@ -12,7 +12,8 @@ class UserRepository @Inject constructor(
 ) {
     // Método para asegurar que existe el usuario root
     suspend fun ensureRootUser() {
-        if (userDao.getUserByEmail("root") == null) {
+        val existing = userDao.getUserByEmail("root")
+        if (existing == null) {
             val rootUser = User(
                 name = "Super Usuario",
                 email = "root",
@@ -21,11 +22,23 @@ class UserRepository @Inject constructor(
             )
             userDao.insertUser(rootUser)
             Log.d(TAG, "✅ Usuario ROOT creado por defecto.")
+        } else if (existing.role != "root") {
+             // Si existe pero no es root (ej. alguien se registró como 'root' antes), corregimos el rol
+             Log.w(TAG, "⚠️ Usuario 'root' detectado con rol incorrecto. Corrigiendo a 'root'.")
+             val fixedUser = existing.copy(role = "root")
+             userDao.insertUser(fixedUser)
         }
     }
 
     suspend fun registerUser(name: String, email: String, passwordHash: String): Boolean {
         Log.d(TAG, "Intentando registrar: $email")
+        
+        // Bloquear registro manual de root
+        if (email.trim().lowercase() == "root") {
+            Log.w(TAG, "❌ Intento de registrar usuario reservado 'root'. Bloqueado.")
+            return false
+        }
+        
         return if (userDao.getUserByEmail(email) == null) {
             // Solo usuarios normales se registran por la pantalla pública
             val newUser = User(
@@ -93,6 +106,27 @@ class UserRepository @Inject constructor(
         }
         
         return user
+    }
+    
+    suspend fun verifyUserExists(email: String): Boolean {
+        return userDao.getUserByEmail(email) != null
+    }
+    
+    suspend fun getUser(email: String): User? {
+        return userDao.getUserByEmail(email)
+    }
+
+    // Alias para compatibilidad con MarketViewModel
+    suspend fun getUserByEmail(email: String): User? = getUser(email)
+
+    suspend fun resetPassword(email: String, newPass: String): Boolean {
+        val user = userDao.getUserByEmail(email)
+        if (user != null) {
+            val updatedUser = user.copy(passwordHash = newPass)
+            userDao.insertUser(updatedUser)
+            return true
+        }
+        return false
     }
 
     fun getAllAdmins(): Flow<List<User>> = userDao.getAllAdmins()

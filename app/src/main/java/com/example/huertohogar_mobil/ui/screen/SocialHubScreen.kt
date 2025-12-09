@@ -42,13 +42,13 @@ fun SocialHubScreen(
         }
     }
 
-    val amigos by viewModel.amigos.collectAsStateWithLifecycle()
+    val chats by viewModel.activeChats.collectAsStateWithLifecycle()
     val solicitudes by viewModel.solicitudesPendientes.collectAsStateWithLifecycle()
     val resultadosBusqueda by viewModel.searchResults.collectAsStateWithLifecycle()
     var query by remember { mutableStateOf("") }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        SectionHeader(title = "Comunidad HuertoHogar", centered = false)
+        SectionHeader(title = "Buzón y Comunidad", centered = false)
         Spacer(modifier = Modifier.height(16.dp))
 
         // Buscador
@@ -99,22 +99,22 @@ fun SocialHubScreen(
                     item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
                 }
 
-                // 3. Mis Amigos
+                // 3. Mis Chats / Amigos (Combinado en activeChats)
                 item {
-                    Text("Mis Amigos", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                    Text("Mis Conversaciones", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                 }
-                if (amigos.isEmpty()) {
+                if (chats.isEmpty()) {
                     item {
                         Box(modifier = Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
-                            Text("Aún no tienes amigos. ¡Busca a alguien!", color = MaterialTheme.colorScheme.secondary)
+                            Text("No tienes conversaciones activas.", color = MaterialTheme.colorScheme.secondary)
                         }
                     }
                 } else {
-                    items(amigos) { amigo ->
+                    items(chats) { chatUser ->
                         PersonaItem(
-                            user = amigo, 
-                            isFriend = true, 
-                            onAction = { onChatClick(amigo.id) },
+                            user = chatUser, 
+                            isFriend = true, // Visualmente similar a amigo
+                            onAction = { onChatClick(chatUser.id) },
                             actionIcon = Icons.AutoMirrored.Filled.Message
                         )
                     }
