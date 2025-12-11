@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.filled.Check
@@ -13,6 +14,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -42,9 +44,12 @@ fun SocialHubScreen(
         }
     }
 
-    val chats by viewModel.activeChats.collectAsStateWithLifecycle()
+    // Ahora usamos chatsDisplay que combina amigos y chats activos
+    val chats by viewModel.chatsDisplay.collectAsStateWithLifecycle()
     val solicitudes by viewModel.solicitudesPendientes.collectAsStateWithLifecycle()
     val resultadosBusqueda by viewModel.searchResults.collectAsStateWithLifecycle()
+    val unreadCounts by viewModel.unreadCounts.collectAsStateWithLifecycle()
+    
     var query by remember { mutableStateOf("") }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -99,21 +104,23 @@ fun SocialHubScreen(
                     item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
                 }
 
-                // 3. Mis Chats / Amigos (Combinado en activeChats)
+                // 3. Mis Chats / Amigos (Combinado en chatsDisplay)
                 item {
-                    Text("Mis Conversaciones", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                    Text("Mis Conversaciones y Amigos", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                 }
                 if (chats.isEmpty()) {
                     item {
                         Box(modifier = Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
-                            Text("No tienes conversaciones activas.", color = MaterialTheme.colorScheme.secondary)
+                            Text("Aún no tienes amigos o conversaciones.", color = MaterialTheme.colorScheme.secondary)
                         }
                     }
                 } else {
                     items(chats) { chatUser ->
+                        val unread = unreadCounts[chatUser.id] ?: 0
                         PersonaItem(
                             user = chatUser, 
                             isFriend = true, // Visualmente similar a amigo
+                            unreadCount = unread,
                             onAction = { onChatClick(chatUser.id) },
                             actionIcon = Icons.AutoMirrored.Filled.Message
                         )
@@ -128,6 +135,7 @@ fun SocialHubScreen(
 fun PersonaItem(
     user: User, 
     isFriend: Boolean, 
+    unreadCount: Int = 0,
     onAction: () -> Unit,
     actionIcon: androidx.compose.ui.graphics.vector.ImageVector
 ) {
@@ -148,6 +156,26 @@ fun PersonaItem(
                     Text("Administrador", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
                 }
             }
+            
+            // Burbuja de mensajes no leídos
+            if (unreadCount > 0) {
+                 Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(Color.Red),
+                    contentAlignment = Alignment.Center
+                 ) {
+                     Text(
+                         text = if (unreadCount > 99) "99+" else unreadCount.toString(),
+                         color = Color.White,
+                         style = MaterialTheme.typography.labelSmall,
+                         fontWeight = FontWeight.Bold
+                     )
+                 }
+                 Spacer(modifier = Modifier.width(8.dp))
+            }
+            
             HuertoIconButton(onClick = onAction) {
                 Icon(
                     imageVector = actionIcon,

@@ -1,6 +1,7 @@
 package com.example.huertohogar_mobil.ui.screen
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -39,30 +40,30 @@ fun InicioScreen(
     ) {
         Image(
             painter = painterResource(id = R.drawable.icono),
-            contentDescription = "Logo HuertoHogar",
+            contentDescription = "Logo Red Privada",
             modifier = Modifier.size(150.dp)
         )
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = "¡Bienvenido a HuertoHogar!",
+            text = "Bienvenido a la Red",
             style = MaterialTheme.typography.headlineMedium,
             textAlign = TextAlign.Center
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "En HuertoHogar, creemos en la importancia de una alimentación sana y sostenible. Cultivamos nuestros productos con amor y dedicación, para que puedas disfrutar de la frescura del campo en la comodidad de tu hogar.",
+            text = "En nuestra red privada, valoramos la exclusividad y el contacto directo. Accede a nuestra selección de artículos gestionados discretamente.",
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center
         )
         Spacer(modifier = Modifier.height(32.dp))
         
         HuertoButton(
-            text = "Ver Productos",
+            text = "Ver Catálogo",
             onClick = onNavigateToProductos
         )
         
         Spacer(modifier = Modifier.height(16.dp))
-
+        
         HuertoButton(
             text = "Mi Perfil",
             onClick = onNavigateToProfile,

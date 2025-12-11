@@ -43,7 +43,6 @@ class P2pManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val socialDao: SocialDao,
     private val userDao: UserDao,
-    private val solicitudDao: SolicitudDao,
     private val carritoDao: CarritoDao,
     private val productoDao: ProductoDao
 ) {
@@ -191,6 +190,16 @@ class P2pManager @Inject constructor(
                 val senderEmail = json.getString("senderEmail")
                 val senderName = json.optString("senderName", "Usuario P2P")
                 val receiverEmail = json.getString("receiverEmail")
+
+                // Auto-discovery from incoming connection (FIX)
+                // Si recibimos un mensaje, aprovechamos para registrar la IP y Puerto del remitente
+                // Esto permite comunicación bidireccional incluso si el descubrimiento NSD falló en este lado.
+                val remotePort = json.optInt("listeningPort", 0)
+                if (remotePort > 0) {
+                    discoveredUsers[senderEmail] = socket.inetAddress
+                    discoveredServicesPorts[senderEmail] = remotePort
+                    updateConnectedPeers()
+                }
                 
                 var sender = userDao.getUserByEmail(senderEmail)
                 
@@ -202,13 +211,28 @@ class P2pManager @Inject constructor(
                 
                 if (sender != null) {
                     when (type) {
-                        "CHAT" -> {
+                        "CHAT", "IMAGEN", "VIDEO", "AUDIO", "UBICACION" -> {
                             val content = json.getString("content")
+                            val timestamp = json.optLong("timestamp", System.currentTimeMillis())
                             val receiver = userDao.getUserByEmail(receiverEmail)
+                            
                             if (receiver != null) {
-                                val msgObj = MensajeChat(remitenteId = sender.id, destinatarioId = receiver.id, contenido = content, estado = EstadoMensaje.RECIBIDO)
-                                socialDao.insertMensaje(msgObj)
-                                showNewMessageNotification(sender, content)
+                                // IMPORTANT: De-duplication check using timestamp and content
+                                if (!socialDao.existeMensaje(sender.id, receiver.id, timestamp, content)) {
+                                    val tipoContenido = if (type == "CHAT") TipoContenido.TEXTO else type
+                                    val msgObj = MensajeChat(
+                                        remitenteId = sender.id, 
+                                        destinatarioId = receiver.id, 
+                                        contenido = content, 
+                                        tipoContenido = tipoContenido,
+                                        timestamp = timestamp,
+                                        estado = EstadoMensaje.RECIBIDO
+                                    )
+                                    socialDao.insertMensaje(msgObj)
+                                    showNewMessageNotification(sender, if(type == "CHAT") content else "Archivo adjunto")
+                                } else {
+                                    Log.d(TAG, "Mensaje duplicado descartado de ${sender.name} ($timestamp)")
+                                }
                             }
                         }
                         "FRIEND_REQUEST" -> handleFriendRequest(senderName, senderEmail, receiverEmail)
@@ -242,10 +266,10 @@ class P2pManager @Inject constructor(
     }
 
     private suspend fun handleFriendRequest(senderName: String, senderEmail: String, receiverEmail: String) {
-        val existing = solicitudDao.getSolicitud(senderEmail, receiverEmail)
+        val existing = socialDao.getSolicitud(senderEmail, receiverEmail)
         if (existing == null) {
             val solicitud = Solicitud(senderName = senderName, senderEmail = senderEmail, receiverEmail = receiverEmail, estado = "PENDIENTE")
-            solicitudDao.insertSolicitud(solicitud)
+            socialDao.insertSolicitud(solicitud)
             showNotification("Nueva solicitud de amistad", "$senderName quiere ser tu amigo")
         }
     }
@@ -432,6 +456,13 @@ class P2pManager @Inject constructor(
         val targetPort = discoveredServicesPorts[receiverEmail]
         if (targetIp == null || targetPort == null) return false
 
+        // FIX: Inject listening port for bidirectional discovery
+        try {
+            json.put("listeningPort", localPort)
+        } catch (e: Exception) {
+            // Ignore if json is locked or error
+        }
+
         return withContext(Dispatchers.IO) {
             try {
                 Socket(targetIp, targetPort).use { socket ->
@@ -450,14 +481,21 @@ class P2pManager @Inject constructor(
     
     suspend fun sendMessageJsonDirect(receiverEmail: String, json: JSONObject) = sendMessageJson(receiverEmail, json)
 
-    suspend fun sendMessage(senderName: String, senderEmail: String, receiverEmail: String, content: String, type: String = "CHAT"): Boolean {
+    suspend fun sendMessage(
+        senderName: String, 
+        senderEmail: String, 
+        receiverEmail: String, 
+        content: String, 
+        type: String = "CHAT",
+        timestamp: Long = System.currentTimeMillis()
+    ): Boolean {
         val json = JSONObject().apply {
             put("type", type)
             put("senderName", senderName)
             put("senderEmail", senderEmail)
             put("receiverEmail", receiverEmail)
             put("content", content)
-            put("timestamp", System.currentTimeMillis())
+            put("timestamp", timestamp)
         }
         return sendMessageJson(receiverEmail, json)
     }

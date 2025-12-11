@@ -22,6 +22,9 @@ object DatabaseModule {
             AppDatabase::class.java,
             "huertohogar_db"
         )
+        // Permite la reconstrucción destructiva de la DB al cambiar la versión.
+        // Esto es necesario para aplicar el índice único en MensajeChat
+        // y solucionar el problema de duplicación de una vez por todas.
         .fallbackToDestructiveMigration() 
         .build()
     }
@@ -40,7 +43,4 @@ object DatabaseModule {
 
     @Provides
     fun provideSocialDao(database: AppDatabase): SocialDao = database.socialDao()
-
-    @Provides
-    fun provideSolicitudDao(database: AppDatabase): SolicitudDao = database.solicitudDao()
 }

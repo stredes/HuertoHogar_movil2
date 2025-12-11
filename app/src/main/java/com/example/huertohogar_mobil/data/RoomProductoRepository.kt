@@ -32,8 +32,14 @@ class RoomProductoRepository @Inject constructor(
         // Si no actualizamos, la BD tendrá IDs viejos que apuntan a recursos incorrectos o inexistentes.
         Log.d(TAG, "Actualizando productos semilla para asegurar IDs de recursos correctos...")
         try {
+            // FIX: Actualizar los precios y detalles de los productos semilla si ya existen,
+            // pero NO sobrescribir si el usuario editó algo intencionalmente (aunque seed data suele ser estático)
+            // En este caso, para arreglar los bugs de precios viejos, FORZAMOS la actualización.
+            
+            // Eliminamos todos los productos semilla antiguos primero para evitar conflictos raros
+            // O simplemente usamos insertAll con REPLACE como hace el DAO.
             productoDao.insertAll(SeedData.productos)
-            Log.d(TAG, "Seed data actualizado correctamente.")
+            Log.d(TAG, "Seed data actualizado correctamente. Precios y recursos restaurados.")
         } catch (e: Exception) {
             Log.e(TAG, "Error actualizando seed data", e)
         }

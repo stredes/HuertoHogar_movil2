@@ -7,11 +7,13 @@ import com.example.huertohogar_mobil.data.SessionManager
 import com.example.huertohogar_mobil.data.UserRepository
 import com.example.huertohogar_mobil.model.User
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 data class AuthUiState(
@@ -84,7 +86,10 @@ class AuthViewModel @Inject constructor(
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
-            val user = userRepository.loginUser(safeEmail, safePassword)
+            // Ejecutar en IO para no bloquear el hilo principal (mejora de latencia percibida)
+            val user = withContext(Dispatchers.IO) {
+                userRepository.loginUser(safeEmail, safePassword)
+            }
             if (user != null) {
                 sessionManager.saveUserSession(safeEmail) // Guardamos sesión
                 _uiState.update { it.copy(user = user, isLoading = false) }

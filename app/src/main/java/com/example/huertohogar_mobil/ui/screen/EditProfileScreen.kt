@@ -25,8 +25,16 @@ fun EditProfileScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val user = uiState.user
 
+    // Si estamos cargando, mostrar indicador en vez de salir
+    if (uiState.isLoading) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
+            CircularProgressIndicator()
+        }
+        return
+    }
+
     if (user == null) {
-        // Si no hay usuario, volver (no debería pasar si se navega correctamente)
+        // Solo salir si NO está cargando y NO hay usuario
         LaunchedEffect(Unit) { onBack() }
         return
     }

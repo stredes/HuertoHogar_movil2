@@ -26,15 +26,15 @@ fun NosotrosScreen() {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Image(
-            painter = painterResource(id = R.drawable.leche_1l), // Reemplaza con una imagen del equipo
-            contentDescription = "Equipo HuertoHogar",
+            painter = painterResource(id = R.drawable.icono), // Usamos el icono general
+            contentDescription = "Equipo Red Privada",
             modifier = Modifier.size(150.dp)
         )
         Spacer(modifier = Modifier.height(16.dp))
         
         SectionHeader(
-            title = "Sobre Nosotros",
-            subtitle = "Somos un equipo apasionado por la comida fresca y saludable. Nuestra misión es llevar los mejores productos del campo a tu hogar, con la comodidad que te mereces."
+            title = "Sobre La Red",
+            subtitle = "Somos un grupo selecto dedicado a la gestión discreta de artículos exclusivos. Nuestra prioridad es la seguridad, la privacidad y la confianza entre nuestros miembros."
         )
     }
 }

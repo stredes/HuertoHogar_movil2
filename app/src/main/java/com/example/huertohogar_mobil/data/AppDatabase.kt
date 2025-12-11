@@ -14,7 +14,7 @@ import com.example.huertohogar_mobil.model.*
         MensajeChat::class,
         Solicitud::class
     ], 
-    version = 9, 
+    version = 11, 
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -23,5 +23,4 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun carritoDao(): CarritoDao
     abstract fun mensajeDao(): MensajeDao
     abstract fun socialDao(): SocialDao
-    abstract fun solicitudDao(): SolicitudDao
 }

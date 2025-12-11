@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.filled.AddCircle
+import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Notifications
@@ -26,9 +27,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -47,6 +49,7 @@ import com.example.huertohogar_mobil.viewmodel.AuthViewModel
 import com.example.huertohogar_mobil.viewmodel.MarketViewModel
 import com.example.huertohogar_mobil.viewmodel.SocialViewModel
 import dagger.hilt.android.AndroidEntryPoint
+import java.util.Locale
 
 
 @AndroidEntryPoint
@@ -56,6 +59,8 @@ class MainActivity : ComponentActivity() {
     private val socialVm: SocialViewModel by viewModels()
 
     private lateinit var navController: NavHostController
+
+    private var permissionsGranted by mutableStateOf(false)
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -70,7 +75,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        if (!hasAllRequiredPermissions()) {
+        permissionsGranted = hasAllRequiredPermissions()
+
+        if (!permissionsGranted) {
             requestRuntimePermissions()
         }
 
@@ -82,20 +89,23 @@ class MainActivity : ComponentActivity() {
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentRoute = navBackStackEntry?.destination?.route
 
+                // Comprobación de rol más robusta (ignora mayúsculas/minúsculas y espacios)
+                val userRole = authState.user?.role?.trim()?.lowercase(Locale.ROOT)
+                val isRoot = userRole == "root"
+                val isAdmin = userRole == "admin"
+                
                 val showBottomBar = currentRoute !in listOf(
                     Routes.IniciarSesion.route,
-                    Routes.Registrarse.route,
-                    Routes.RootDashboard.route
-                ) && !(currentRoute?.startsWith("edit_user") == true)
+                    Routes.Registrarse.route
+                ) && currentRoute?.startsWith("edit_user") != true
 
-                val isAdmin = authState.user?.role == "admin"
                 val currentUserEmail = authState.user?.email // Capturamos email actual
 
                 // FIX: Lanzar Servicio en Foreground cuando el usuario está listo y permisos concedidos
-                LaunchedEffect(authState.user, hasAllRequiredPermissions()) {
+                LaunchedEffect(authState.user, permissionsGranted) {
                     if (authState.user != null &&
                         authState.user!!.role != "root" &&
-                        hasAllRequiredPermissions()
+                        permissionsGranted
                     ) {
                         // 1. Notificar al ViewModel (lógica de UI)
                         socialVm.onPermissionsGranted(authState.user!!.email)
@@ -105,10 +115,31 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                // Manejo del ciclo de vida de la app para P2P (Pausar/Reanudar discovery)
+                val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+                androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+                    val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                        when (event) {
+                            androidx.lifecycle.Lifecycle.Event.ON_RESUME -> socialVm.onAppResume()
+                            androidx.lifecycle.Lifecycle.Event.ON_PAUSE -> socialVm.onAppPause()
+                            else -> {}
+                        }
+                    }
+                    lifecycleOwner.lifecycle.addObserver(observer)
+                    onDispose {
+                        lifecycleOwner.lifecycle.removeObserver(observer)
+                    }
+                }
+
+
                 Scaffold(
                     bottomBar = {
                         if (showBottomBar) {
-                            BottomNavBar(navController = navController, isAdmin = isAdmin)
+                            BottomNavBar(
+                                navController = navController,
+                                isAdmin = isAdmin,
+                                isRoot = isRoot
+                            )
                         }
                     }
                 ) { paddingValues ->
@@ -206,14 +237,17 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                         
-                        // Nueva Ruta para Compartir Carrito (si existe el screen)
+                        // Nueva Ruta para Compartir Carrito
                         composable(Routes.CompartirCarrito.route) {
-                             // CompartirCarritoScreen(viewModel = vm, onBack = { navController.popBackStack() })
-                             // Si no existe, comentamos o creamos placeholder. 
-                             // El viewmodel tiene la lógica pero no tengo el screen a mano en la lista reciente.
-                             // Dejaré un placeholder o lo removeré si falla.
-                             // Asumiré que no es crítico por ahora, pero lo dejo vacío
-                             Text("Compartir Carrito")
+                             CompartirCarritoScreen(
+                                marketUiState = ui,
+                                socialViewModel = socialVm,
+                                marketViewModel = vm,
+                                onBack = { navController.popBackStack() },
+                                onCompartidoExitoso = {
+                                    navController.popBackStack()
+                                }
+                             )
                         }
 
                         composable(
@@ -323,7 +357,9 @@ class MainActivity : ComponentActivity() {
                         }
                         
                         composable(Routes.EditProfile.route) {
+                             // FIX: Pasar el viewModel 'authVm' compartido para no perder el estado del usuario
                              EditProfileScreen(
+                                 viewModel = authVm,
                                  onBack = { navController.popBackStack() }
                              )
                         }
@@ -455,8 +491,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun onAllPermissionsGranted() {
-        // Inicializar si el usuario ya estaba logueado
-        // (La lógica reactiva en LaunchedEffect(user) se encargará)
+        permissionsGranted = true
     }
 
     private fun onPermissionsDenied() {
@@ -465,18 +500,25 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun BottomNavBar(navController: NavController, isAdmin: Boolean) {
+fun BottomNavBar(navController: NavController, isAdmin: Boolean, isRoot: Boolean) {
     val items = mutableListOf(
         Routes.Inicio to Icons.Default.Home,
         Routes.Productos to Icons.Default.Store,
         Routes.SocialHub to Icons.Default.People,
-        Routes.Nosotros to Icons.Default.Info,
-        Routes.Blog to Icons.AutoMirrored.Filled.Article,
-    ).apply {
-        if (isAdmin) {
-            add(Routes.AgregarProducto to Icons.Default.AddCircle)
-            add(Routes.AdminNotificaciones to Icons.Default.Notifications)
-        }
+    )
+
+    // Para ROOT: Reemplazar Nosotros por Dashboard
+    if (isRoot) {
+         items.add(Routes.RootDashboard to Icons.Default.Dashboard)
+    } else {
+         items.add(Routes.Nosotros to Icons.Default.Info)
+    }
+    
+    items.add(Routes.Blog to Icons.AutoMirrored.Filled.Article)
+
+    if (isAdmin) {
+        items.add(Routes.AgregarProducto to Icons.Default.AddCircle)
+        items.add(Routes.AdminNotificaciones to Icons.Default.Notifications)
     }
 
     NavigationBar {
@@ -491,6 +533,7 @@ fun BottomNavBar(navController: NavController, isAdmin: Boolean) {
                 Routes.AgregarProducto -> "Crear"
                 Routes.AdminNotificaciones -> "Buzón"
                 Routes.SocialHub -> "Comunidad"
+                Routes.RootDashboard -> "Dashboard" // Etiqueta para el dashboard
                 else -> screen.route.replaceFirstChar { it.uppercase() }
             }
 

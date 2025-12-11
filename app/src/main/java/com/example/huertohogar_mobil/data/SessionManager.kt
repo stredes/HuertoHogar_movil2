@@ -25,6 +25,9 @@ class SessionManager @Inject constructor(
     }
 
     fun clearSession() {
+        // En lugar de borrar todo, podemos considerar mantener algo si es necesario, 
+        // pero para cerrar sesión (logout) borrar el email de sesión es correcto.
+        // La limpieza de base de datos no debe ocurrir aquí.
         prefs.edit().remove(KEY_USER_EMAIL).apply()
     }
 }

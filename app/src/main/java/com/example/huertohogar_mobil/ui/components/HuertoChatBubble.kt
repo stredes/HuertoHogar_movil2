@@ -6,6 +6,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Mic
@@ -29,7 +30,7 @@ fun HuertoChatBubble(
     message: String,
     isMine: Boolean,
     estado: Int = EstadoMensaje.ENVIADO,
-    tipoContenido: String = TipoContenido.TEXTO // Agregamos el tipo de contenido
+    tipoContenido: String = TipoContenido.TEXTO
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -119,17 +120,22 @@ fun HuertoChatBubble(
                     val icon = when(estado) {
                         EstadoMensaje.ENVIANDO -> Icons.Default.AccessTime
                         EstadoMensaje.ENVIADO -> Icons.Default.Check
-                        EstadoMensaje.RECIBIDO -> Icons.Default.Check 
+                        EstadoMensaje.RECIBIDO -> Icons.Default.DoneAll
+                        EstadoMensaje.LEIDO -> Icons.Default.DoneAll
                         EstadoMensaje.ERROR -> Icons.Default.Warning
                         else -> Icons.Default.Check
                     }
                     
-                    val iconColor = if (estado == EstadoMensaje.ERROR) Color.Red else MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
+                    val iconColor = when(estado) {
+                        EstadoMensaje.ERROR -> Color.Red
+                        EstadoMensaje.LEIDO -> Color(0xFF64B5F6) // Azul claro
+                        else -> MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
+                    }
 
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        modifier = Modifier.size(12.dp),
+                        modifier = Modifier.size(16.dp),
                         tint = iconColor
                     )
                 }

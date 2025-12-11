@@ -2,6 +2,7 @@ package com.example.huertohogar_mobil.model
 
 import androidx.room.Entity
 import androidx.room.ForeignKey
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 object EstadoMensaje {
@@ -27,7 +28,8 @@ object TipoContenido {
     foreignKeys = [
         ForeignKey(entity = User::class, parentColumns = ["id"], childColumns = ["remitenteId"], onDelete = ForeignKey.CASCADE),
         ForeignKey(entity = User::class, parentColumns = ["id"], childColumns = ["destinatarioId"], onDelete = ForeignKey.CASCADE)
-    ]
+    ],
+    indices = [Index(value = ["remitenteId", "destinatarioId", "timestamp", "contenido"], unique = true)]
 )
 data class MensajeChat(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

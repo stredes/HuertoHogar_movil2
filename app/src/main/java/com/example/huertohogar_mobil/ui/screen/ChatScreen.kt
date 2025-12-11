@@ -44,10 +44,18 @@ fun ChatScreen(
     viewModel: SocialViewModel = hiltViewModel(),
     onBack: () -> Unit
 ) {
+    // Cuando se monta el composable, activamos el listener específico
     LaunchedEffect(Unit) {
         if (currentUserEmail != null) {
             viewModel.setCurrentUser(currentUserEmail)
-            viewModel.cargarChat(amigoId)
+            viewModel.enterChat(amigoId) // Nueva función que activa el listener en tiempo real
+        }
+    }
+    
+    // Cuando salimos de la pantalla (onDispose), limpiamos el listener
+    DisposableEffect(Unit) {
+        onDispose {
+            viewModel.leaveChat()
         }
     }
 
@@ -75,7 +83,8 @@ fun ChatScreen(
         LaunchedEffect(Unit) {
             if (amigo != null) {
                 viewModel.solicitarSincronizacionManual(amigo.email)
-                viewModel.cargarChat(amigoId)
+                // Forzamos reconexión de listener también
+                viewModel.enterChat(amigoId)
             }
             delay(1500)
             isRefreshing = false

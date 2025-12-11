@@ -3,7 +3,9 @@ package com.example.huertohogar_mobil.data
 import androidx.room.*
 import com.example.huertohogar_mobil.model.Amistad
 import com.example.huertohogar_mobil.model.MensajeChat
+import com.example.huertohogar_mobil.model.Solicitud
 import com.example.huertohogar_mobil.model.User
+import com.example.huertohogar_mobil.model.UnreadCount
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -17,8 +19,7 @@ interface SocialDao {
         WHERE a.usuarioId = :miId
     """)
     fun getAmigos(miId: Int): Flow<List<User>>
-    
-    // Nueva query para obtener usuarios con los que existe conversación (independiente de amistad)
+
     @Query("""
         SELECT DISTINCT u.* FROM users u
         INNER JOIN mensajes_chat m ON (u.id = m.remitenteId OR u.id = m.destinatarioId)
@@ -26,6 +27,7 @@ interface SocialDao {
     """)
     fun getUsuariosConChat(miId: Int): Flow<List<User>>
 
+    // FIX: Se agrega la condición para excluir también a los amigos ya agregados
     @Query("""
         SELECT * FROM users 
         WHERE id != :miId 
@@ -36,9 +38,31 @@ interface SocialDao {
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun agregarAmigo(amistad: Amistad)
+    
+    @Query("DELETE FROM amistades WHERE (usuarioId = :miId AND amigoId = :amigoId) OR (usuarioId = :amigoId AND amigoId = :miId)")
+    suspend fun deleteAmigo(miId: Int, amigoId: Int)
 
     @Query("SELECT EXISTS(SELECT 1 FROM amistades WHERE usuarioId = :miId AND amigoId = :otroId)")
     suspend fun esAmigo(miId: Int, otroId: Int): Boolean
+
+    // --- SOLICITUDES ---
+    
+    // COLLATE NOCASE para asegurar que el email coincida sin importar mayúsculas/minúsculas
+    @Query("SELECT * FROM solicitudes WHERE receiverEmail = :email COLLATE NOCASE AND estado = 'PENDIENTE'")
+    fun getSolicitudesPendientes(email: String): Flow<List<Solicitud>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSolicitud(solicitud: Solicitud)
+
+    @Query("UPDATE solicitudes SET estado = :nuevoEstado WHERE id = :id")
+    suspend fun updateEstadoSolicitud(id: Int, nuevoEstado: String)
+    
+    @Query("DELETE FROM solicitudes WHERE id = :id")
+    suspend fun deleteSolicitud(id: Int)
+    
+    // Verificación insensible a mayúsculas para evitar duplicados
+    @Query("SELECT * FROM solicitudes WHERE senderEmail = :senderEmail COLLATE NOCASE AND receiverEmail = :receiverEmail COLLATE NOCASE")
+    suspend fun getSolicitud(senderEmail: String, receiverEmail: String): Solicitud?
 
     // --- CHAT ---
 
@@ -83,9 +107,28 @@ interface SocialDao {
     """)
     suspend fun existeMensaje(remitenteId: Int, destinatarioId: Int, timestamp: Long, contenido: String): Boolean
 
+    // Nuevo metodo para actualizar estado por contenido (cuando llega update de Firebase)
+    @Query("""
+        UPDATE mensajes_chat 
+        SET estado = :nuevoEstado 
+        WHERE remitenteId = :remitenteId 
+        AND destinatarioId = :destinatarioId 
+        AND timestamp = :timestamp 
+        AND contenido = :contenido
+    """)
+    suspend fun updateEstadoPorContenido(remitenteId: Int, destinatarioId: Int, timestamp: Long, contenido: String, nuevoEstado: Int)
+
     @Query("SELECT * FROM mensajes_chat ORDER BY timestamp DESC LIMIT 1")
     suspend fun getLatestMessage(): MensajeChat?
 
     @Query("SELECT timestamp FROM mensajes_chat ORDER BY timestamp DESC LIMIT 1")
     suspend fun getLastMessageTimestamp(): Long?
+
+    // --- NUEVO: Burbujas y Doble Tick ---
+
+    @Query("SELECT remitenteId, COUNT(*) as total FROM mensajes_chat WHERE destinatarioId = :miId AND estado != 4 GROUP BY remitenteId")
+    fun getUnreadCounts(miId: Int): Flow<List<UnreadCount>>
+
+    @Query("UPDATE mensajes_chat SET estado = 4 WHERE remitenteId = :amigoId AND destinatarioId = :miId AND estado != 4")
+    suspend fun markAsRead(amigoId: Int, miId: Int)
 }
