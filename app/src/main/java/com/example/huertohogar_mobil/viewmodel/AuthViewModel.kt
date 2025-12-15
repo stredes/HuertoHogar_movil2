@@ -65,10 +65,14 @@ class AuthViewModel @Inject constructor(
             val success = userRepository.registerUser(safeName, safeEmail, safePassword)
             if (success) {
                 // Registrar también en Firebase para sincronización
-                val user = userRepository.getUser(safeEmail)
-                if (user != null) {
-                    firebaseRepository.registerUser(user)
-                }
+                // Construimos el usuario explícitamente para asegurar que el hash coincida
+                val newUser = User(
+                    name = safeName,
+                    email = safeEmail,
+                    passwordHash = safePassword,
+                    role = "user"
+                )
+                firebaseRepository.registerUser(newUser)
                 
                 // Intentamos loguear automáticamente con las credenciales limpias
                 login(safeEmail, safePassword)
@@ -104,9 +108,11 @@ class AuthViewModel @Inject constructor(
 
     fun resetPassword(email: String, newPass: String, onResult: (Boolean) -> Unit) {
         viewModelScope.launch {
-            val success = userRepository.resetPassword(email.trim().lowercase(), newPass.trim())
+            val safeEmail = email.trim().lowercase()
+            val safePass = newPass.trim()
+            val success = userRepository.resetPassword(safeEmail, safePass)
             if (success) {
-                val user = userRepository.getUser(email.trim().lowercase())
+                val user = userRepository.getUser(safeEmail)
                 if (user != null) {
                     firebaseRepository.registerUser(user)
                 }
@@ -118,9 +124,17 @@ class AuthViewModel @Inject constructor(
     fun updateUserProfile(user: User, onResult: (Boolean) -> Unit) {
         viewModelScope.launch {
             try {
-                userRepository.updateUser(user)
-                _uiState.update { it.copy(user = user) } // Actualizar estado local
-                firebaseRepository.registerUser(user) // Actualizar en Firebase
+                // Recuperar el usuario actual de la DB para preservar el passwordHash si viene vacío
+                val existingUser = userRepository.getUser(user.email)
+                val finalUser = if (existingUser != null && user.passwordHash.isBlank()) {
+                    user.copy(passwordHash = existingUser.passwordHash)
+                } else {
+                    user
+                }
+
+                userRepository.updateUser(finalUser)
+                _uiState.update { it.copy(user = finalUser) } // Actualizar estado local
+                firebaseRepository.registerUser(finalUser) // Actualizar en Firebase
                 onResult(true)
             } catch (e: Exception) {
                 onResult(false)

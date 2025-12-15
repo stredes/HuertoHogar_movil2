@@ -10,6 +10,7 @@ object EstadoMensaje {
     const val ERROR = 2
     const val RECIBIDO = 3
     const val LEIDO = 4
+    const val ENVIANDO_NUBE = 5
 }
 
 // Tipo de contenido para multimedia

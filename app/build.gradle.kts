@@ -111,6 +111,7 @@ dependencies {
     implementation(libs.firebase.firestore)
     implementation(libs.firebase.analytics)
     implementation(libs.firebase.storage)
+    implementation(libs.firebase.auth)
 
     // FIX: Forzar versiones de GMS para evitar 'SecurityException: Unknown calling package'
     implementation("com.google.android.gms:play-services-base:18.3.0")

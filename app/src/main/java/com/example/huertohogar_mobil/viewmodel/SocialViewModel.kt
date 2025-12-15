@@ -113,11 +113,16 @@ class SocialViewModel @Inject constructor(
                         var enviado = p2pManager.sendMessage(remitente.name, remitente.email, destinatario.email, msg.contenido)
                         
                         if (!enviado) {
+                             // Marcamos como enviando a nube para evitar duplicados si P2P falla falsamente
+                             socialDao.updateEstado(msg.id, EstadoMensaje.ENVIANDO_NUBE)
                              enviado = firebaseRepository.sendMessage(remitente, destinatario.email, msg.contenido)
                         }
 
                         if (enviado) {
                             socialDao.updateEstado(msg.id, EstadoMensaje.ENVIADO)
+                        } else {
+                            // Si falla también en nube, revertimos a ENVIANDO o ERROR según lógica de reintento
+                            socialDao.updateEstado(msg.id, EstadoMensaje.ERROR)
                         }
                     }
                 }
@@ -181,10 +186,8 @@ class SocialViewModel @Inject constructor(
     fun enviarSolicitudAmistad(destinatario: User) {
         val user = _currentUser.value ?: return
         viewModelScope.launch {
-            if (destinatario.id == 0) {
-                 val tempUser = destinatario.copy(passwordHash = "p2p_guest")
-                 userDao.insertUser(tempUser)
-            }
+            // No creamos usuario temporal en DB local inmediatamente para evitar conflictos.
+            // Confiamos en el email para el envío.
             
             var success = p2pManager.sendMessage(
                 senderName = user.name,
@@ -269,6 +272,8 @@ class SocialViewModel @Inject constructor(
                                                 if (tipoContenido == TipoContenido.TEXTO) "CHAT" else tipoContenido)
                 
                 if (!enviado) {
+                    // Actualizamos estado intermedio antes de intentar nube
+                    socialDao.updateEstado(mensajeId, EstadoMensaje.ENVIANDO_NUBE)
                     enviado = firebaseRepository.sendMessage(user, destinatario.email, texto, 
                                                             if (tipoContenido == TipoContenido.TEXTO) "CHAT" else tipoContenido)
                 }
