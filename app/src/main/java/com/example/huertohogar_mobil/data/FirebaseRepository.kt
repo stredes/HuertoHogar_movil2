@@ -48,7 +48,9 @@ class FirebaseRepository @Inject constructor(
     private val socialDao: SocialDao,
     private val userDao: UserDao,
     private val productoDao: ProductoDao,
-    private val mensajeDao: MensajeDao
+    private val mensajeDao: MensajeDao,
+    private val pedidoDao: PedidoDao,
+    private val notificationRouter: NotificationRouter
 ) {
 
     companion object {
@@ -56,6 +58,7 @@ class FirebaseRepository @Inject constructor(
         private const val COLLECTION_USERS = "users"
         private const val COLLECTION_FRIENDS = "friends"
         private const val COLLECTION_PRODUCTS = "products"
+        private const val COLLECTION_PEDIDOS = "pedidos"
         
         // Colección "Bandeja de entrada" temporal (Legacy/Notificaciones)
         private const val COLLECTION_MESSAGES_INBOX = "messages" 
@@ -77,6 +80,7 @@ class FirebaseRepository @Inject constructor(
     private var friendsListener: ListenerRegistration? = null
     private var productListener: ListenerRegistration? = null
     private var chatListListener: ListenerRegistration? = null
+    private var pedidosListener: ListenerRegistration? = null
 
     private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     
@@ -129,6 +133,9 @@ class FirebaseRepository @Inject constructor(
             cleanup()
             processedMessageIds.clear()
             
+            // Asegurar que el usuario actual exista en Room con ID válido
+            ensureCurrentUserInRoom(email)
+
             // 1. Iniciar escucha global
             startGlobalInboxListener(email)
             // 2. Iniciar sincronización de lista de chats
@@ -140,6 +147,20 @@ class FirebaseRepository @Inject constructor(
             registerUserOnline(email)
             
             migrateLegacyMessages(email) 
+        }
+    }
+
+    private suspend fun ensureCurrentUserInRoom(email: String) {
+        try {
+            var me = userDao.getUserByEmail(email)
+            if (me == null || me.id <= 0) {
+                // Intentar obtener datos reales desde la nube
+                val cloudUser = getUserDirectly(email)
+                me = cloudUser ?: User(name = email.substringBefore("@"), email = email, passwordHash = "synced", role = "user")
+                userDao.insertUser(me.copy(id = 0))
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "No se pudo asegurar usuario actual en Room: ${e.message}")
         }
     }
 
@@ -155,12 +176,31 @@ class FirebaseRepository @Inject constructor(
      */
     suspend fun sendMessage(sender: User, receiverEmail: String, content: String, type: String = "CHAT", localTimestamp: Long? = null): Boolean {
         val db = db ?: return false
+        // Preparar IDs locales para estado de ticks
+        val receiver = userDao.getUserByEmail(receiverEmail) ?: getUserDirectly(receiverEmail)?.also { userDao.insertUser(it) }?.let { userDao.getUserByEmail(receiverEmail) }
+        val timestamp = localTimestamp ?: System.currentTimeMillis()
+
+        // Inserción local: ENVIANDO (un tick)
+        if (receiver != null) {
+            val remitenteId = sender.id
+            val destinatarioId = receiver.id
+            if (remitenteId > 0 && destinatarioId > 0 && !socialDao.existeMensaje(remitenteId, destinatarioId, timestamp, content)) {
+                val localMsg = MensajeChat(
+                    id = 0L,
+                    remitenteId = remitenteId,
+                    destinatarioId = destinatarioId,
+                    contenido = content,
+                    tipoContenido = if (type == "CHAT") "TEXTO" else type,
+                    timestamp = timestamp,
+                    estado = EstadoMensaje.ENVIANDO
+                )
+                socialDao.insertMensaje(localMsg)
+            }
+        }
+
         return try {
-            val msgId = UUID.randomUUID().toString() 
+            val msgId = UUID.randomUUID().toString()
             val chatId = getChatId(sender.email, receiverEmail)
-            
-            // Usamos el timestamp local si existe (para que coincida con Room), si no, el actual
-            val timestamp = localTimestamp ?: System.currentTimeMillis()
             
             val messageData = hashMapOf(
                 "id" to msgId,
@@ -176,7 +216,6 @@ class FirebaseRepository @Inject constructor(
             )
 
             val batch = db.batch()
-            
             val historyMsgRef = db.collection(COLLECTION_CHATS_HISTORY)
                 .document(chatId)
                 .collection(SUBCOLLECTION_MENSAJES)
@@ -195,15 +234,34 @@ class FirebaseRepository @Inject constructor(
             val inboxRef = db.collection(COLLECTION_MESSAGES_INBOX).document(msgId)
             batch.set(inboxRef, messageData)
 
-            // Timeout manual de 3 segundos para considerar "éxito cloud" rápido
-            // Si tarda más, devolvemos false para que SocialRepository intente P2P
             kotlinx.coroutines.withTimeout(3000L) {
-                 batch.commit().await()
+                batch.commit().await()
             }
             Log.d(TAG, "Mensaje enviado a Cloud (ID: $msgId)")
+
+            // Actualización local: ENVIADO (doble tick gris)
+            if (receiver != null && sender.id > 0 && receiver.id > 0) {
+                socialDao.updateEstadoPorContenido(
+                    remitenteId = sender.id,
+                    destinatarioId = receiver.id,
+                    timestamp = timestamp,
+                    contenido = content,
+                    nuevoEstado = EstadoMensaje.ENVIADO
+                )
+            }
             true
         } catch (e: Exception) {
             Log.e(TAG, "Fallo envío Cloud (Timeout o Error): ${e.message}")
+            // Actualización local: ERROR si falló el envío
+            if (receiver != null && sender.id > 0 && receiver.id > 0) {
+                socialDao.updateEstadoPorContenido(
+                    remitenteId = sender.id,
+                    destinatarioId = receiver.id,
+                    timestamp = timestamp,
+                    contenido = content,
+                    nuevoEstado = EstadoMensaje.ERROR
+                )
+            }
             false
         }
     }
@@ -380,76 +438,146 @@ class FirebaseRepository @Inject constructor(
         when (type) {
             "CHAT", "IMAGEN", "AUDIO", "VIDEO", "UBICACION" -> {
                 val isMine = (senderEmail == myEmail)
-                
-                // 2. FILTRO DE BASE DE DATOS (Persistencia)
-                // Verificamos si ya existe EXACTAMENTE este mensaje
-                val exists = socialDao.existeMensaje(sender.id, me.id, timestamp, content)
-                
-                // Determinar estado inicial
                 val isActiveChatOpen = (currentActiveChatId == chatId)
-                val finalState = if (isReadInCloud || isActiveChatOpen) EstadoMensaje.LEIDO else EstadoMensaje.RECIBIDO
+                val finalStateIncoming = if (isReadInCloud || isActiveChatOpen) EstadoMensaje.LEIDO else EstadoMensaje.RECIBIDO
 
+                if (isMine) {
+                    // Mensaje propio reflejado desde Cloud: actualizar ENVIADO o LEÍDO
+                    val me = userDao.getUserByEmail(myEmail) ?: return
+                    val otherEmail = data["receiverEmail"] as? String ?: return
+                    val other = userDao.getUserByEmail(otherEmail) ?: getUserDirectly(otherEmail)?.also { userDao.insertUser(it) }?.let { userDao.getUserByEmail(otherEmail) } ?: return
+                    val nuevoEstado = if (isReadInCloud) EstadoMensaje.LEIDO else EstadoMensaje.ENVIADO
+                    if (me.id > 0 && other.id > 0) {
+                        socialDao.updateEstadoPorContenido(
+                            remitenteId = me.id,
+                            destinatarioId = other.id,
+                            timestamp = timestamp,
+                            contenido = content,
+                            nuevoEstado = nuevoEstado
+                        )
+                    }
+                    return
+                }
+
+                // Mensaje entrante (del otro)
+                val exists = socialDao.existeMensaje(sender.id, me.id, timestamp, content)
                 if (exists) {
-                    // Si ya existe, actualizamos el estado si ha cambiado (ej. de enviado a leido)
-                    // Esto es clave para el doble check azul
-                    if (finalState != EstadoMensaje.ENVIANDO && finalState != EstadoMensaje.ERROR) {
-                        // Buscar el mensaje existente para obtener su ID
-                        // Como no tenemos el ID de room fácil aquí, podríamos necesitar una query inversa
-                        // Pero para simplificar, asumiremos que la actualización de estado ocurre por el flujo normal
+                    // Si ya existe, actualizar a LEÍDO cuando corresponda
+                    if (finalStateIncoming == EstadoMensaje.LEIDO) {
+                        socialDao.updateEstadoPorContenido(
+                            remitenteId = sender.id,
+                            destinatarioId = me.id,
+                            timestamp = timestamp,
+                            contenido = content,
+                            nuevoEstado = EstadoMensaje.LEIDO
+                        )
                     }
                     return
                 }
                 
-                val remitenteId = if (isMine) me.id else sender.id
-                val destinatarioId = if (isMine) sender.id else me.id
+                val remitenteId = sender.id
+                val destinatarioId = me.id
+
+                // VALIDACIÓN DEFENSIVA DE IDS PARA EVITAR VIOLACIÓN DE FK
+                if (remitenteId <= 0 || destinatarioId <= 0) {
+                    Log.w(TAG, "Saltando inserción de mensaje por IDs inválidos (remitenteId=$remitenteId, destinatarioId=$destinatarioId)")
+                    return
+                }
 
                 val msg = MensajeChat(
-                    id = 0L, 
+                    id = 0L,
                     remitenteId = remitenteId,
                     destinatarioId = destinatarioId,
                     contenido = content,
                     tipoContenido = if (type == "CHAT") "TEXTO" else type,
                     timestamp = timestamp,
-                    estado = finalState
+                    estado = finalStateIncoming
                 )
                 socialDao.insertMensaje(msg)
 
-                // 3. LOGICA DE NOTIFICACIÓN SUPREMA
-                // Solo notificamos si se cumplen TODAS las condiciones:
-                // - No es mi propio mensaje.
-                // - No estoy viendo este chat ahora mismo (currentActiveChatId != chatId).
-                // - El mensaje no está marcado como leído en la nube.
-                // - Es un mensaje reciente (< 5 minutos).
-                
-                val shouldNotify = !isMine && 
-                                   !isActiveChatOpen && 
-                                   !isReadInCloud && 
-                                   (System.currentTimeMillis() - timestamp < 300000)
-
+                // Notificaciones
+                val shouldNotify = !isActiveChatOpen && !isReadInCloud && (System.currentTimeMillis() - timestamp < 300000)
                 if (shouldNotify) {
-                    showNotification("Mensaje de ${sender.name}", 
-                        if(type == "CHAT") content else "Te envió un archivo adjunto")
-                } else if (isActiveChatOpen && !isMine) {
-                    // Si el chat está abierto, marcamos como leído en nube inmediatamente
+                    showNotification("Mensaje de ${sender.name}", if(type == "CHAT") content else "Te envió un archivo adjunto")
+                } else if (isActiveChatOpen) {
                     markMessagesAsRead(chatId, myEmail)
                 }
             }
             "FRIEND_REQUEST" -> {
-                val existingRequest = socialDao.getSolicitud(sender.email, me.email)
-                if (existingRequest == null || existingRequest.estado == "RECHAZADA") {
-                    val solicitud = Solicitud(0, sender.name, sender.email, me.email, timestamp, "PENDIENTE")
-                    socialDao.insertSolicitud(solicitud)
-                    showNotification("Solicitud de Amistad", "${sender.name} quiere conectar")
+                Log.d(TAG, "📨 Procesando FRIEND_REQUEST de ${sender.email} para ${me.email}")
+
+                // ✨ VALIDACIÓN CENTRALIZADA con NotificationRouter
+                val canReceive = notificationRouter.canSendNotification(
+                    NotificationRouter.NotificationType.FRIEND_REQUEST,
+                    sender.email,
+                    me.email
+                )
+
+                if (!canReceive) {
+                    Log.d(TAG, "🚫 NotificationRouter bloqueó FRIEND_REQUEST")
+                    return
                 }
+
+                Log.d(TAG, "✅ NotificationRouter aprobó FRIEND_REQUEST")
+
+                // Crear la solicitud
+                val solicitud = Solicitud(
+                    id = 0,
+                    senderName = sender.name,
+                    senderEmail = sender.email,
+                    receiverEmail = me.email,
+                    timestamp = timestamp,
+                    estado = "PENDIENTE"
+                )
+                socialDao.insertSolicitud(solicitud)
+                showNotification("Solicitud de Amistad", "${sender.name} quiere conectar")
             }
             "REQUEST_ACCEPTED" -> {
-                if (!socialDao.esAmigo(me.id, sender.id)) {
-                    addFriendInCloud(me.email, sender.email)
-                    socialDao.agregarAmigo(Amistad(me.id, sender.id))
-                    socialDao.agregarAmigo(Amistad(sender.id, me.id))
-                    showNotification("Nuevo Amigo", "${sender.name} aceptó tu solicitud")
+                Log.d(TAG, "✅ Procesando REQUEST_ACCEPTED de ${sender.email}")
+
+                // ✨ VALIDACIÓN CENTRALIZADA con NotificationRouter
+                val canReceive = notificationRouter.canSendNotification(
+                    NotificationRouter.NotificationType.REQUEST_ACCEPTED,
+                    sender.email,
+                    me.email
+                )
+
+                if (!canReceive) {
+                    Log.d(TAG, "🚫 NotificationRouter bloqueó REQUEST_ACCEPTED (duplicado reciente)")
+                    return
                 }
-                socialDao.getSolicitud(me.email, sender.email)?.let { 
+
+                // 1. Verificar si ya son amigos
+                if (!socialDao.esAmigo(me.id, sender.id)) {
+                    val otherUser = userDao.getUserByEmail(sender.email)
+                    if (otherUser != null) {
+                        Log.d(TAG, "✅ Creando amistad entre ${me.email} y ${sender.email}")
+
+                        // Guardar en nube y local
+                        addFriendInCloud(me.email, sender.email)
+                        socialDao.agregarAmigo(Amistad(me.id, otherUser.id))
+                        socialDao.agregarAmigo(Amistad(otherUser.id, me.id))
+
+                        showNotification("Nuevo Amigo", "${sender.name} aceptó tu solicitud")
+                    } else {
+                        Log.e(TAG, "❌ No se pudo encontrar al usuario ${sender.email} en la BD local")
+                    }
+                } else {
+                    Log.d(TAG, "⚠️ Ya eran amigos, solo limpiando solicitudes...")
+                }
+
+                // 2. LIMPIAR TODAS LAS SOLICITUDES entre estos dos usuarios (ambas direcciones)
+                Log.d(TAG, "🧹 Limpiando todas las solicitudes entre ${me.email} y ${sender.email}")
+
+                // Eliminar solicitud directa (yo -> otro)
+                socialDao.getSolicitud(me.email, sender.email)?.let {
+                    Log.d(TAG, "🧹 Eliminando solicitud directa ${it.id}")
+                    socialDao.deleteSolicitud(it.id)
+                }
+
+                // Eliminar solicitud inversa (otro -> yo)
+                socialDao.getSolicitud(sender.email, me.email)?.let {
+                    Log.d(TAG, "🧹 Eliminando solicitud inversa ${it.id}")
                     socialDao.deleteSolicitud(it.id)
                 }
             }
@@ -457,6 +585,70 @@ class FirebaseRepository @Inject constructor(
                 val fecha = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date(timestamp))
                 mensajeDao.insertMensaje(MensajeContacto(0, senderName, senderEmail, content, fecha, false))
                 showNotification("Soporte/Contacto", "$senderName envió un formulario")
+            }
+        }
+    }
+
+    suspend fun crearPedido(pedido: Pedido): Boolean {
+        return try {
+            db?.collection(COLLECTION_PEDIDOS)?.document(pedido.pedidoId)?.set(pedido)?.await()
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error creando pedido en Firebase", e)
+            false
+        }
+    }
+
+    suspend fun actualizarEstadoPedido(
+        pedidoId: String,
+        estado: EstadoPedido,
+        metodoPago: String? = null,
+        datosTransferencia: String? = null,
+        fechaDespacho: Long? = null,
+        ultimaActualizacion: Long? = null
+    ): Boolean {
+        return try {
+            val updates = mutableMapOf<String, Any>(
+                "estado" to estado,
+                "ultimaActualizacion" to (ultimaActualizacion ?: System.currentTimeMillis())
+            )
+            metodoPago?.let { updates["metodoPago"] = it }
+            datosTransferencia?.let { updates["datosTransferencia"] = it }
+            fechaDespacho?.let { updates["fechaDespacho"] = it }
+
+            db?.collection(COLLECTION_PEDIDOS)?.document(pedidoId)?.update(updates)?.await()
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error actualizando estado de pedido en Firebase", e)
+            false
+        }
+    }
+
+    fun listenToPedidos(email: String, esProveedor: Boolean) {
+        pedidosListener?.remove()
+
+        val query = if (esProveedor) {
+            db?.collection(COLLECTION_PEDIDOS)?.whereEqualTo("proveedorEmail", email)
+        } else {
+            db?.collection(COLLECTION_PEDIDOS)?.whereEqualTo("compradorEmail", email)
+        }
+
+        pedidosListener = query?.addSnapshotListener { snapshots, e ->
+            if (e != null) {
+                Log.w(TAG, "Error escuchando pedidos", e)
+                return@addSnapshotListener
+            }
+
+            for (dc in snapshots!!.documentChanges) {
+                val pedido = dc.document.toObject(Pedido::class.java)
+                when (dc.type) {
+                    DocumentChange.Type.ADDED, DocumentChange.Type.MODIFIED -> {
+                        ioScope.launch {
+                            pedidoDao.insertPedido(pedido)
+                        }
+                    }
+                    else -> {}
+                }
             }
         }
     }
@@ -618,18 +810,39 @@ class FirebaseRepository @Inject constructor(
         userListener?.remove()
         productListener?.remove()
         friendsListener?.remove()
+        pedidosListener?.remove()
         currentActiveChatId = null
     }
 
     fun observeUserStatus(email: String): Flow<Boolean> = callbackFlow {
-        val listener = db?.collection(COLLECTION_USERS)?.document(email)
-            ?.addSnapshotListener { snapshot, _ ->
-                if (snapshot != null && snapshot.exists()) {
-                    val lastSeen = snapshot.getLong("lastSeen") ?: 0L
-                    val isOnline = (System.currentTimeMillis() - lastSeen) < 120000
-                    trySend(isOnline)
-                } else trySend(false)
+        var listener: com.google.firebase.firestore.ListenerRegistration? = null
+        try {
+            listener = db?.collection(COLLECTION_USERS)?.document(email)
+                ?.addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        close(error)
+                        return@addSnapshotListener
+                    }
+                    try {
+                        if (snapshot != null && snapshot.exists()) {
+                            val lastSeen = snapshot.getLong("lastSeen") ?: 0L
+                            val isOnline = (System.currentTimeMillis() - lastSeen) < 120000
+                            trySend(isOnline)
+                        } else {
+                            trySend(false)
+                        }
+                    } catch (e: Exception) {
+                        close(e)
+                    }
+                }
+
+            awaitClose {
+                listener?.remove()
             }
-        awaitClose { listener?.remove() }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error en observeUserStatus", e)
+            listener?.remove()
+            close(e)
+        }
     }
 }

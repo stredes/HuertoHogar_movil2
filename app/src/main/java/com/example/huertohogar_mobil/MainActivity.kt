@@ -155,6 +155,7 @@ class MainActivity : ComponentActivity() {
                             InicioScreen(
                                 onNavigateToProductos = { navController.navigate(Routes.Productos.route) },
                                 onNavigateToProfile = { navController.navigate(Routes.EditProfile.route) },
+                                onNavigateToMisPedidos = { navController.navigate(Routes.MisPedidos.route) },
                                 onLogout = {
                                     stopP2pService() // Detener servicio al cerrar sesión
                                     authVm.logout()
@@ -191,9 +192,10 @@ class MainActivity : ComponentActivity() {
                             CheckoutScreen(
                                 ui = ui,
                                 onBack = { navController.popBackStack() },
-                                onFinalizar = {
-                                    vm.notificarCompra()
+                                onPedidoCreado = {
+                                    // Limpiar carrito después de crear el pedido
                                     vm.limpiarCarrito()
+                                    // Navegar a la pantalla de confirmación
                                     navController.navigate(Routes.FinPago.route) {
                                         popUpTo(Routes.Inicio.route) { inclusive = false }
                                     }
@@ -290,9 +292,33 @@ class MainActivity : ComponentActivity() {
                         }
 
                         composable(Routes.AdminNotificaciones.route) {
-                            AdminNotificacionesScreen(onBack = { navController.popBackStack() })
+                            AdminNotificacionesScreen(
+                                onBack = { navController.popBackStack() },
+                                onNavigateToBuzonProveedor = { navController.navigate(Routes.BuzonProveedor.route) }
+                            )
+                        }
+
+                        // ---------- BUZÓN DE PROVEEDOR ----------
+                        composable(Routes.BuzonProveedor.route) {
+                            BuzonProveedorScreen(
+                                onBack = { navController.popBackStack() }
+                            )
                         }
                         
+                        // ---------- MIS PEDIDOS ----------
+                        composable(Routes.MisPedidos.route) {
+                            MisPedidosScreen(
+                                onBack = { navController.popBackStack() }
+                            )
+                        }
+
+                        // ---------- ADMINISTRACIÓN DE PEDIDOS ----------
+                        composable(Routes.AdminPedidos.route) {
+                            AdminPedidosScreen(
+                                onBack = { navController.popBackStack() }
+                            )
+                        }
+
                         // ---------- ROOT DASHBOARD ----------
                         composable(Routes.RootDashboard.route) {
                              RootDashboardScreen(

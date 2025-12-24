@@ -23,6 +23,8 @@ sealed class Routes(val route: String) {
         const val ARG_ID = "id"
     }
     data object AdminNotificaciones : Routes("admin_notificaciones")
+    data object AdminPedidos : Routes("admin_pedidos")
+    data object BuzonProveedor : Routes("buzon_proveedor")
 
     // Rutas Sociales
     data object SocialHub : Routes("social_hub")
@@ -51,4 +53,5 @@ sealed class Routes(val route: String) {
     
     // Ruta Usuario
     data object EditProfile : Routes("edit_profile")
+    data object MisPedidos : Routes("mis_pedidos")
 }

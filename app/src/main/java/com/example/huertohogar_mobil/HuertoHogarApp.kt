@@ -6,7 +6,10 @@ import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
 import android.os.Debug
+import android.util.Log
 import dagger.hilt.android.HiltAndroidApp
+
+private const val TAG = "HuertoHogarApp"
 
 @HiltAndroidApp
 class HuertoHogarApp : Application() {
@@ -18,6 +21,15 @@ class HuertoHogarApp : Application() {
         }
         
         super.onCreate()
+
+        Log.d(TAG, "════════════════════════════════════════════════════════════")
+        Log.d(TAG, "🚀 INICIANDO HUERTOHOGAR")
+        Log.d(TAG, "════════════════════════════════════════════════════════════")
+        Log.d(TAG, "Sincronización bidireccional: LISTA")
+        Log.d(TAG, "Firebase persistence: HABILITADA")
+        Log.d(TAG, "Offline-first: ACTIVO")
+        Log.d(TAG, "════════════════════════════════════════════════════════════")
+
         createNotificationChannel()
     }
 

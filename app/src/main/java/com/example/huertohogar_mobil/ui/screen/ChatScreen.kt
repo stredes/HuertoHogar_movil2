@@ -71,6 +71,13 @@ fun ChatScreen(
     val amigo = amigos.find { it.id == amigoId }
     val isConnectedLocally = amigo != null && connectedPeers.contains(amigo.email)
     
+    // Nombre a mostrar en el header: usar amigoNombre si viene, sino intentar obtener del amigo en Room
+    // Si amigoNombre es null/blank, usar el nombre del amigo encontrado; si no existe, usar email o "Chat"
+    val displayName = amigoNombre?.takeIf { it.isNotBlank() }
+        ?: amigo?.name?.takeIf { it.isNotBlank() }
+        ?: amigo?.email
+        ?: "Chat"
+
     // El amigo está "disponible" si está online en Firebase O conectado localmente
     val isAvailable = isFriendOnline || isConnectedLocally
 
@@ -120,14 +127,31 @@ fun ChatScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            CenterAlignedTopAppBar(
                 title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(text = amigoNombre ?: "Chat", fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.width(8.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(start = 8.dp)
+                        ) {
+                            Text(
+                                text = displayName,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = MaterialTheme.typography.titleMedium.fontSize
+                            )
+                            Text(
+                                text = if (isAvailable) "En línea" else "Sin conexión",
+                                fontSize = MaterialTheme.typography.labelSmall.fontSize,
+                                color = if (isAvailable) Color.Green else Color.Red
+                            )
+                        }
                         Box(
                             modifier = Modifier
-                                .size(10.dp)
+                                .size(12.dp)
                                 .clip(CircleShape)
                                 .background(if (isAvailable) Color.Green else Color.Red)
                         )
@@ -143,7 +167,7 @@ fun ChatScreen(
                         Icon(Icons.Default.Refresh, contentDescription = "Actualizar conexión y mensajes")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 )

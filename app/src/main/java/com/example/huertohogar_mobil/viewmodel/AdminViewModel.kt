@@ -39,12 +39,28 @@ class AdminViewModel @Inject constructor(
     private val _uninstallRequest = MutableSharedFlow<Unit>()
     val uninstallRequest: SharedFlow<Unit> = _uninstallRequest.asSharedFlow()
 
+    private val _isRefreshing = MutableSharedFlow<Boolean>()
+    val isRefreshing: SharedFlow<Boolean> = _isRefreshing.asSharedFlow()
+
     val mensajes: StateFlow<List<MensajeContacto>> = mensajeRepo.getMensajes()
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = emptyList()
         )
+
+    fun refresh() {
+        viewModelScope.launch {
+            _isRefreshing.emit(true)
+            try {
+                // Los mensajes se actualizan automáticamente a través de flows
+                // Solo agregamos un pequeño delay para la animación
+                kotlinx.coroutines.delay(500)
+            } finally {
+                _isRefreshing.emit(false)
+            }
+        }
+    }
 
     fun marcarComoRespondido(id: Int, actual: Boolean) {
         viewModelScope.launch {

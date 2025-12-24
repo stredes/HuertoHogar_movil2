@@ -1,0 +1,310 @@
+package com.example.huertohogar_mobil.viewmodel
+
+import android.util.Log
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.huertohogar_mobil.data.FirebaseRepository
+import com.example.huertohogar_mobil.data.PedidoDao
+import com.example.huertohogar_mobil.model.EstadoPedido
+import com.example.huertohogar_mobil.model.Pedido
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import javax.inject.Inject
+
+private const val TAG = "PedidoViewModel"
+
+/**
+ * ViewModel mejorado para gestionar pedidos con sincronización automática.
+ *
+ * Características:
+ * - Sincronización inicial al cargar
+ * - Listeners activos para cambios en tiempo real
+ * - Validación de transiciones de estado
+ * - Manejo de errores y reintentos
+ * - Notificaciones de cambios
+ */
+@HiltViewModel
+class PedidoViewModel @Inject constructor(
+    private val firebaseRepository: FirebaseRepository,
+    private val pedidoDao: PedidoDao
+) : ViewModel() {
+
+    // ============================================
+    // STATE MANAGEMENT
+    // ============================================
+
+    private val _pedidos = MutableStateFlow<List<Pedido>>(emptyList())
+    val pedidos: StateFlow<List<Pedido>> = _pedidos.asStateFlow()
+
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+
+    private val _syncStatus = MutableStateFlow<SyncStatus>(SyncStatus.IDLE)
+    val syncStatus: StateFlow<SyncStatus> = _syncStatus.asStateFlow()
+
+    private var currentUserEmail: String? = null
+    private var esProveedor: Boolean = false
+
+    // ============================================
+    // INICIALIZACIÓN
+    // ============================================
+
+    /**
+     * Inicializa el ViewModel y comienza la sincronización automática
+     * DEBE ser llamado cuando el usuario hace login
+     */
+    fun initialize(userEmail: String, esProveedor: Boolean = false) {
+        if (currentUserEmail == userEmail) {
+            Log.d(TAG, "ViewModel ya inicializado para $userEmail")
+            return
+        }
+
+        currentUserEmail = userEmail
+        this.esProveedor = esProveedor
+
+        Log.d(TAG, "Inicializando ViewModel para: $userEmail (esProveedor=$esProveedor)")
+
+        viewModelScope.launch {
+            try {
+                _isLoading.value = true
+                _syncStatus.value = SyncStatus.SYNCING
+
+                // 1. Inicializar Firebase (descarga datos iniciales)
+                firebaseRepository.initialize(userEmail)
+
+                // 2. Cargar pedidos desde Room DB
+                loadPedidosFromDatabase()
+
+                Log.d(TAG, "✅ ViewModel inicializado exitosamente")
+                _syncStatus.value = SyncStatus.SYNCED
+
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Error inicializando ViewModel", e)
+                _errorMessage.value = "Error al cargar pedidos: ${e.message}"
+                _syncStatus.value = SyncStatus.ERROR
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    // ============================================
+    // CARGAR DATOS
+    // ============================================
+
+    /**
+     * Carga los pedidos desde la BD local
+     * Los listeners de Firebase actualizarán esto automáticamente
+     */
+    private fun loadPedidosFromDatabase() {
+        viewModelScope.launch {
+            try {
+                val pedidosFromDb = if (esProveedor) {
+                    pedidoDao.getPedidosDelProveedor(currentUserEmail ?: "")
+                } else {
+                    pedidoDao.getPedidosDelComprador(currentUserEmail ?: "")
+                }
+
+                _pedidos.value = pedidosFromDb
+                Log.d(TAG, "✅ Cargados ${pedidosFromDb.size} pedidos desde BD local")
+
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Error cargando pedidos desde BD", e)
+                _errorMessage.value = "Error cargando pedidos"
+            }
+        }
+    }
+
+    /**
+     * Recarga los pedidos (sincronización manual)
+     * Útil para cuando el usuario hace "pull-to-refresh"
+     */
+    fun refreshPedidos() {
+        Log.d(TAG, "🔄 Refrescando pedidos...")
+        _syncStatus.value = SyncStatus.SYNCING
+
+        viewModelScope.launch {
+            try {
+                // Recargar desde BD (los listeners ya mantienen esto actualizado)
+                loadPedidosFromDatabase()
+                _syncStatus.value = SyncStatus.SYNCED
+                Log.d(TAG, "✅ Pedidos refrescados")
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Error refrescando", e)
+                _syncStatus.value = SyncStatus.ERROR
+            }
+        }
+    }
+
+    // ============================================
+    // ACTUALIZAR ESTADO DE PEDIDO
+    // ============================================
+
+    /**
+     * Actualiza el estado de un pedido
+     * AUTOMATICAMENTE:
+     * 1. Valida la transición
+     * 2. Guarda localmente
+     * 3. Envía a Firebase
+     * 4. Se sincroniza con otros dispositivos
+     */
+    fun actualizarEstadoPedido(
+        pedidoId: String,
+        nuevoEstado: EstadoPedido,
+        metodoPago: String? = null,
+        datosTransferencia: String? = null
+    ) {
+        Log.d(TAG, "Actualizando pedido $pedidoId → $nuevoEstado")
+
+        viewModelScope.launch {
+            try {
+                _syncStatus.value = SyncStatus.SYNCING
+
+                val success = firebaseRepository.actualizarEstadoPedido(
+                    pedidoId = pedidoId,
+                    nuevoEstado = nuevoEstado,
+                    metodoPago = metodoPago,
+                    datosTransferencia = datosTransferencia
+                )
+
+                if (success) {
+                    Log.d(TAG, "✅ Pedido actualizado: $pedidoId → $nuevoEstado")
+                    _syncStatus.value = SyncStatus.SYNCED
+
+                    // Los listeners de Firebase actualizarán automáticamente
+                    // la BD local en 1-2 segundos
+                } else {
+                    Log.e(TAG, "❌ Error actualizando pedido")
+                    _errorMessage.value = "No se pudo actualizar el pedido"
+                    _syncStatus.value = SyncStatus.ERROR
+                }
+
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Exception actualizando pedido", e)
+                _errorMessage.value = "Error: ${e.message}"
+                _syncStatus.value = SyncStatus.ERROR
+            }
+        }
+    }
+
+    /**
+     * Confirma un pedido (PENDIENTE → CONFIRMADO)
+     */
+    fun confirmarPedido(pedidoId: String) {
+        actualizarEstadoPedido(pedidoId, EstadoPedido.CONFIRMADO)
+    }
+
+    /**
+     * Marca como pagado (ESPERANDO_PAGO → PAGADO)
+     */
+    fun marcarComoPagado(pedidoId: String) {
+        actualizarEstadoPedido(pedidoId, EstadoPedido.PAGADO)
+    }
+
+    /**
+     * Marca como listo para despacho (PAGADO → LISTO_DESPACHO)
+     */
+    fun marcarListoDespacho(pedidoId: String) {
+        actualizarEstadoPedido(pedidoId, EstadoPedido.LISTO_DESPACHO)
+    }
+
+    /**
+     * Marca como en camino (LISTO_DESPACHO → EN_CAMINO)
+     */
+    fun marcarEnCamino(pedidoId: String) {
+        actualizarEstadoPedido(pedidoId, EstadoPedido.EN_CAMINO)
+    }
+
+    /**
+     * Marca como entregado (EN_CAMINO → ENTREGADO)
+     */
+    fun marcarEntregado(pedidoId: String) {
+        actualizarEstadoPedido(pedidoId, EstadoPedido.ENTREGADO)
+    }
+
+    /**
+     * Cancela un pedido (CUALQUIER_ESTADO → CANCELADO)
+     */
+    fun cancelarPedido(pedidoId: String) {
+        actualizarEstadoPedido(pedidoId, EstadoPedido.CANCELADO)
+    }
+
+    // ============================================
+    // UTILIDADES
+    // ============================================
+
+    /**
+     * Obtiene un pedido específico por ID
+     */
+    fun getPedidoById(pedidoId: String): Pedido? {
+        return _pedidos.value.find { it.pedidoId == pedidoId }
+    }
+
+    /**
+     * Obtiene los pedidos filtrados por estado
+     */
+    fun getPedidosByEstado(estado: EstadoPedido): List<Pedido> {
+        return _pedidos.value.filter { it.estado == estado }
+    }
+
+    /**
+     * Obtiene los pedidos pendientes (PENDIENTE y CONFIRMADO)
+     */
+    fun getPedidosPendientes(): List<Pedido> {
+        return _pedidos.value.filter {
+            it.estado in listOf(
+                EstadoPedido.PENDIENTE,
+                EstadoPedido.CONFIRMADO,
+                EstadoPedido.ESPERANDO_PAGO
+            )
+        }
+    }
+
+    /**
+     * Obtiene los pedidos en tránsito (EN_CAMINO)
+     */
+    fun getPedidosEnTransito(): List<Pedido> {
+        return _pedidos.value.filter { it.estado == EstadoPedido.EN_CAMINO }
+    }
+
+    /**
+     * Obtiene los pedidos completados (ENTREGADO)
+     */
+    fun getPedidosEntregados(): List<Pedido> {
+        return _pedidos.value.filter { it.estado == EstadoPedido.ENTREGADO }
+    }
+
+    /**
+     * Limpia el mensaje de error
+     */
+    fun clearError() {
+        _errorMessage.value = null
+    }
+
+    // ============================================
+    // CLEANUP
+    // ============================================
+
+    override fun onCleared() {
+        super.onCleared()
+        Log.d(TAG, "ViewModel destruido")
+        firebaseRepository.cleanup()
+    }
+}
+
+/**
+ * Estados posibles de sincronización
+ */
+enum class SyncStatus {
+    IDLE,      // Sin sincronización
+    SYNCING,   // Sincronizando
+    SYNCED,    // Sincronizado correctamente
+    ERROR      // Error durante sincronización
+}
+

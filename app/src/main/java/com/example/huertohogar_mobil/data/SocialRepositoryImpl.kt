@@ -15,7 +15,8 @@ class SocialRepositoryImpl @Inject constructor(
     private val socialDao: SocialDao,
     private val userDao: UserDao,
     private val firebaseRepository: FirebaseRepository,
-    private val p2pManager: P2pManager
+    private val p2pManager: P2pManager,
+    private val notificationRouter: NotificationRouter
 ) : SocialRepository {
 
     private val TAG = "SocialRepository"
@@ -45,12 +46,16 @@ class SocialRepositoryImpl @Inject constructor(
         .flatMapLatest { user -> socialDao.getConversacion(user.id, amigoId) }
 
     override fun getChatFriendStatus(amigoId: Int): Flow<Boolean> = flow {
-         val friend = userDao.getUserById(amigoId)
-         if (friend != null) {
-             emitAll(firebaseRepository.observeUserStatus(friend.email))
-         } else {
-             emit(false)
-         }
+        try {
+            val friend = userDao.getUserById(amigoId)
+            if (friend != null) {
+                emitAll(firebaseRepository.observeUserStatus(friend.email))
+            } else {
+                emit(false)
+            }
+        } catch (e: Exception) {
+            emit(false)
+        }
     }
 
     override fun getUnreadCounts(): Flow<Map<Int, Int>> = _currentUser
@@ -178,8 +183,22 @@ class SocialRepositoryImpl @Inject constructor(
              userDao.getUserByEmail(destinatario.email)?.let { destinatarioFinal = it }
         }
         
-        Log.d(TAG, "Enviando solicitud de ${user.email} a ${destinatarioFinal.email}")
-        
+        Log.d(TAG, "🔍 Intentando enviar solicitud de ${user.email} a ${destinatarioFinal.email}")
+
+        // ✨ VALIDACIÓN CENTRALIZADA con NotificationRouter
+        val canSend = notificationRouter.canSendNotification(
+            NotificationRouter.NotificationType.FRIEND_REQUEST,
+            user.email,
+            destinatarioFinal.email
+        )
+
+        if (!canSend) {
+            Log.d(TAG, "🚫 NotificationRouter bloqueó la solicitud")
+            return
+        }
+
+        Log.d(TAG, "✅ NotificationRouter aprobó el envío")
+
         // PROTOCOLO FIREBASE FIRST: Prioridad Cloud para persistencia
         var success = firebaseRepository.sendMessage(user, destinatarioFinal.email, "Hola, quiero ser tu amigo", "FRIEND_REQUEST")
         
@@ -195,15 +214,19 @@ class SocialRepositoryImpl @Inject constructor(
         }
 
         if (success) {
+            Log.d(TAG, "✅ Solicitud enviada exitosamente")
             _searchResults.value = _searchResults.value.filter { it.email != destinatarioFinal.email }
         } else {
-             Log.e(TAG, "Fallo al enviar solicitud de amistad")
+             Log.e(TAG, "❌ Fallo al enviar solicitud de amistad")
         }
     }
 
     override suspend fun aceptarSolicitud(solicitud: Solicitud) {
         val user = _currentUser.value ?: return
         
+        Log.d(TAG, "✅ Aceptando solicitud de ${solicitud.senderEmail}")
+
+        // 1. Marcar solicitud como ACEPTADA
         socialDao.updateEstadoSolicitud(solicitud.id, "ACEPTADA")
         
         var senderUser = userDao.getUserByEmail(solicitud.senderEmail)
@@ -214,14 +237,27 @@ class SocialRepositoryImpl @Inject constructor(
         }
 
         if (senderUser != null) {
-            // 1. Guardar localmente
+            // 2. VERIFICAR QUE NO SEAN YA AMIGOS (por si acaso)
+            val yaAmigos = socialDao.esAmigo(user.id, senderUser.id)
+            if (yaAmigos) {
+                Log.d(TAG, "⚠️ Ya eran amigos, solo limpiando solicitudes...")
+                // Limpiar solicitudes duplicadas
+                socialDao.deleteSolicitud(solicitud.id)
+                socialDao.getSolicitud(user.email, senderUser.email)?.let { socialDao.deleteSolicitud(it.id) }
+                socialDao.getSolicitud(senderUser.email, user.email)?.let { socialDao.deleteSolicitud(it.id) }
+                return
+            }
+
+            // 3. Guardar localmente la amistad (bidireccional)
             socialDao.agregarAmigo(Amistad(user.id, senderUser.id))
             socialDao.agregarAmigo(Amistad(senderUser.id, user.id))
-            
-            // 2. Guardar en Nube (Persistencia)
+            Log.d(TAG, "✅ Amistad creada localmente")
+
+            // 4. Guardar en Nube (Persistencia)
             firebaseRepository.addFriendInCloud(user.email, senderUser.email)
-            
-            // 3. Crear Mensaje de Sistema
+            Log.d(TAG, "✅ Amistad guardada en la nube")
+
+            // 5. Crear Mensaje de Sistema
             val welcomeMsg = MensajeChat(
                 remitenteId = senderUser.id,
                 destinatarioId = user.id,
@@ -232,7 +268,22 @@ class SocialRepositoryImpl @Inject constructor(
             )
             socialDao.insertMensaje(welcomeMsg)
 
-            // 4. Avisar al otro (FIREBASE FIRST)
+            // 6. LIMPIAR TODAS LAS SOLICITUDES ENTRE ESTOS USUARIOS (en ambas direcciones)
+            // Esto previene que queden solicitudes residuales que causen duplicados
+            Log.d(TAG, "🧹 Limpiando solicitudes entre ${user.email} y ${senderUser.email}")
+            socialDao.deleteSolicitud(solicitud.id)
+            socialDao.getSolicitud(user.email, senderUser.email)?.let {
+                Log.d(TAG, "🧹 Eliminando solicitud inversa ${it.id}")
+                socialDao.deleteSolicitud(it.id)
+            }
+            socialDao.getSolicitud(senderUser.email, user.email)?.let {
+                if (it.id != solicitud.id) {
+                    Log.d(TAG, "🧹 Eliminando solicitud duplicada ${it.id}")
+                    socialDao.deleteSolicitud(it.id)
+                }
+            }
+
+            // 7. Avisar al otro (FIREBASE FIRST)
             var sent = firebaseRepository.sendMessage(user, solicitud.senderEmail, "Solicitud aceptada", "REQUEST_ACCEPTED")
             
             if (!sent) {
@@ -244,6 +295,8 @@ class SocialRepositoryImpl @Inject constructor(
                     type = "REQUEST_ACCEPTED"
                 )
             }
+
+            Log.d(TAG, "✅ Proceso de aceptación completado")
         }
     }
 

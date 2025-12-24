@@ -1,5 +1,7 @@
 package com.example.huertohogar_mobil.di
 
+import com.example.huertohogar_mobil.data.PedidoRepository
+import com.example.huertohogar_mobil.data.PedidoRepositoryImpl
 import com.example.huertohogar_mobil.data.ProductoRepository
 import com.example.huertohogar_mobil.data.RoomProductoRepository
 import com.example.huertohogar_mobil.data.SocialRepository
@@ -25,4 +27,10 @@ abstract class RepositoryModule {
     abstract fun bindSocialRepository(
         socialRepositoryImpl: SocialRepositoryImpl
     ): SocialRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindPedidoRepository(
+        pedidoRepositoryImpl: PedidoRepositoryImpl
+    ): PedidoRepository
 }
