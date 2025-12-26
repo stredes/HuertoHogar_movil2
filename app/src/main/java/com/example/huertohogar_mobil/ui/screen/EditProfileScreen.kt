@@ -15,6 +15,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.huertohogar_mobil.ui.components.HuertoButton
 import com.example.huertohogar_mobil.ui.components.HuertoTextField
 import com.example.huertohogar_mobil.ui.components.HuertoTopBar
+import com.example.huertohogar_mobil.ui.components.RutTextField
+import com.example.huertohogar_mobil.utils.RutValidator
 import com.example.huertohogar_mobil.viewmodel.AuthViewModel
 
 @Composable
@@ -40,11 +42,16 @@ fun EditProfileScreen(
     }
 
     var name by remember { mutableStateOf(user.name) }
+    var rut by remember { mutableStateOf(user.rut) }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
     
     var errorMsg by remember { mutableStateOf<String?>(null) }
     var successMsg by remember { mutableStateOf<String?>(null) }
+    var rutError by remember { mutableStateOf<String?>(null) }
+
+    // Solo usuarios normales requieren RUT
+    val requiereRut = user.role == "user"
 
     Scaffold(
         topBar = {
@@ -68,6 +75,21 @@ fun EditProfileScreen(
                 label = "Nombre",
                 leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) }
             )
+
+            // Solo mostrar campo RUT para usuarios normales
+            if (requiereRut) {
+                RutTextField(
+                    value = rut,
+                    onValueChange = {
+                        rut = it
+                        rutError = null
+                    },
+                    isError = rutError != null,
+                    errorMessage = rutError,
+                    readOnly = rut.isNotEmpty(), // Solo lectura si ya tiene RUT
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
 
             HuertoTextField(
                 value = user.email,
@@ -110,10 +132,29 @@ fun EditProfileScreen(
                 onClick = {
                     errorMsg = null
                     successMsg = null
+                    rutError = null
 
                     if (name.isBlank()) {
                         errorMsg = "El nombre no puede estar vacío"
                         return@HuertoButton
+                    }
+
+                    // Validar RUT obligatorio solo para usuarios normales
+                    if (requiereRut) {
+                        if (rut.isEmpty()) {
+                            rutError = "El RUT es obligatorio para continuar usando la aplicación"
+                            return@HuertoButton
+                        }
+
+                        if (!RutValidator.validarRut(rut)) {
+                            rutError = "El RUT ingresado no es válido"
+                            return@HuertoButton
+                        }
+
+                        if (RutValidator.esRutInstitucional(rut)) {
+                            rutError = "No se permiten RUT institucionales (Militares/Policiales)"
+                            return@HuertoButton
+                        }
                     }
 
                     if (password.isNotEmpty() && password != confirmPassword) {
@@ -123,7 +164,11 @@ fun EditProfileScreen(
 
                     val finalPassword = if (password.isNotEmpty()) password else user.passwordHash
                     
-                    val updatedUser = user.copy(name = name, passwordHash = finalPassword)
+                    val updatedUser = user.copy(
+                        name = name,
+                        passwordHash = finalPassword,
+                        rut = rut
+                    )
 
                     viewModel.updateUserProfile(updatedUser) { success ->
                         if (success) {

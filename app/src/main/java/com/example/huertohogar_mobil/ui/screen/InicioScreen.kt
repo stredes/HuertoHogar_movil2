@@ -1,7 +1,6 @@
 package com.example.huertohogar_mobil.ui.screen
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -120,6 +119,7 @@ fun InicioScreen(
             }
             Spacer(modifier = Modifier.height(16.dp))
         }
+
 
         HuertoButton(
             text = "Ver Catálogo",

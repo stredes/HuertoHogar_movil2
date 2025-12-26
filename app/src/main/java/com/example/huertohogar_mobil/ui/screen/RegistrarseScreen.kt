@@ -22,7 +22,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.huertohogar_mobil.ui.components.HuertoButton
 import com.example.huertohogar_mobil.ui.components.HuertoLoader
 import com.example.huertohogar_mobil.ui.components.HuertoTextField
+import com.example.huertohogar_mobil.ui.components.RutTextField
 import com.example.huertohogar_mobil.ui.components.SectionHeader
+import com.example.huertohogar_mobil.utils.RutValidator
 import com.example.huertohogar_mobil.viewmodel.AuthViewModel
 
 @Composable
@@ -31,9 +33,11 @@ fun RegistrarseScreen(
     onRegistroExitoso: () -> Unit = {}
 ) {
     var name by remember { mutableStateOf("") }
+    var rut by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    
+    var rutError by remember { mutableStateOf<String?>(null) }
+
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(uiState.user) {
@@ -58,6 +62,19 @@ fun RegistrarseScreen(
             label = "Nombre"
         )
         Spacer(modifier = Modifier.height(8.dp))
+
+        RutTextField(
+            value = rut,
+            onValueChange = {
+                rut = it
+                rutError = null
+            },
+            isError = rutError != null,
+            errorMessage = rutError,
+            modifier = Modifier
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+
         HuertoTextField(
             value = email,
             onValueChange = { email = it },
@@ -86,7 +103,27 @@ fun RegistrarseScreen(
         } else {
             HuertoButton(
                 text = "Registrarse",
-                onClick = { viewModel.register(name, email, password) }
+                onClick = {
+                    rutError = null
+
+                    // Validar RUT
+                    if (rut.isEmpty()) {
+                        rutError = "El RUT es obligatorio"
+                        return@HuertoButton
+                    }
+
+                    if (!RutValidator.validarRut(rut)) {
+                        rutError = "El RUT ingresado no es válido"
+                        return@HuertoButton
+                    }
+
+                    if (RutValidator.esRutInstitucional(rut)) {
+                        rutError = "No se permiten RUT institucionales (Militares/Policiales)"
+                        return@HuertoButton
+                    }
+
+                    viewModel.register(name, email, password, rut)
+                }
             )
         }
     }

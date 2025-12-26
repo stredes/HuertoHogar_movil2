@@ -27,7 +27,11 @@ enum class SyncStatus {
 data class PedidoUiState(
     val pedidos: List<Pedido> = emptyList(),
     val misPedidos: List<Pedido> = emptyList(),
+    val misPedidosActivos: List<Pedido> = emptyList(),  // Pedidos en proceso
+    val misPedidosHistorial: List<Pedido> = emptyList(),  // Pedidos completados/entregados
     val pedidosRecibidos: List<Pedido> = emptyList(),
+    val pedidosRecibidosActivos: List<Pedido> = emptyList(),  // Pedidos a procesar
+    val pedidosRecibidosHistorial: List<Pedido> = emptyList(),  // Pedidos completados
     val isLoading: Boolean = false,
     val error: String? = null,
     val syncStatus: SyncStatus = SyncStatus.IDLE
@@ -103,13 +107,17 @@ class PedidoViewModel @Inject constructor(
                     }
                     .collect { pedidos ->
                         Log.d("PedidoViewModel", "✅ Pedidos del proveedor actualizados: ${pedidos.size}")
-                        pedidos.forEach { pedido ->
-                            Log.d("PedidoViewModel", "   - Pedido ${pedido.pedidoId}: ${pedido.estado} de ${pedido.compradorNombre}")
-                        }
+
+                        // Separar activos de historial
+                        val activos = pedidos.filter { it.estado != EstadoPedido.ENTREGADO.name && it.estado != EstadoPedido.CANCELADO.name }
+                        val historial = pedidos.filter { it.estado == EstadoPedido.ENTREGADO.name || it.estado == EstadoPedido.CANCELADO.name }
+
                         _uiState.update {
                             it.copy(
                                 pedidos = pedidos,
                                 pedidosRecibidos = pedidos,
+                                pedidosRecibidosActivos = activos,
+                                pedidosRecibidosHistorial = historial,
                                 isLoading = false,
                                 error = null
                             )
@@ -124,13 +132,17 @@ class PedidoViewModel @Inject constructor(
                     }
                     .collect { pedidos ->
                         Log.d("PedidoViewModel", "✅ Pedidos del comprador actualizados: ${pedidos.size}")
-                        pedidos.forEach { pedido ->
-                            Log.d("PedidoViewModel", "   - Pedido ${pedido.pedidoId}: ${pedido.estado} para ${pedido.proveedorEmail}")
-                        }
+
+                        // Separar activos de historial
+                        val activos = pedidos.filter { it.estado != EstadoPedido.ENTREGADO.name && it.estado != EstadoPedido.CANCELADO.name }
+                        val historial = pedidos.filter { it.estado == EstadoPedido.ENTREGADO.name || it.estado == EstadoPedido.CANCELADO.name }
+
                         _uiState.update {
                             it.copy(
                                 pedidos = pedidos,
                                 misPedidos = pedidos,
+                                misPedidosActivos = activos,
+                                misPedidosHistorial = historial,
                                 isLoading = false,
                                 error = null
                             )

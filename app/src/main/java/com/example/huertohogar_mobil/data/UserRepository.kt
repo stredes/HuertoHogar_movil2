@@ -31,31 +31,39 @@ class UserRepository @Inject constructor(
         }
     }
 
-    suspend fun registerUser(name: String, email: String, passwordHash: String): Boolean {
-        Log.d(TAG, "Intentando registrar: $email")
-        
+    suspend fun registerUser(name: String, email: String, passwordHash: String, rut: String = ""): Boolean {
+        Log.d(TAG, "Intentando registrar: $email con RUT: $rut")
+
         // Bloquear registro manual de root
         if (email.trim().lowercase() == "root") {
             Log.w(TAG, "❌ Intento de registrar usuario reservado 'root'. Bloqueado.")
             return false
         }
         
-        return if (userDao.getUserByEmail(email) == null) {
-            // Solo usuarios normales se registran por la pantalla pública
-            val newUser = User(
-                name = name, 
-                email = email, 
-                passwordHash = passwordHash,
-                role = "user"
-            )
-            userDao.insertUser(newUser)
-            firebaseRepository.registerUser(newUser) // Sync con Firebase al crear
-            Log.d(TAG, "✅ Usuario creado en DB: ${newUser.email}")
-            true
-        } else {
+        // Verificar si el email ya existe
+        if (userDao.getUserByEmail(email) != null) {
             Log.w(TAG, "❌ Fallo registro: El email $email ya existe en la DB")
-            false
+            return false
         }
+
+        // Verificar si el RUT ya existe (si se proporcionó)
+        if (rut.isNotEmpty() && userDao.getUserByRut(rut) != null) {
+            Log.w(TAG, "❌ Fallo registro: El RUT $rut ya existe en la DB")
+            return false
+        }
+
+        // Solo usuarios normales se registran por la pantalla pública
+        val newUser = User(
+            name = name,
+            email = email,
+            passwordHash = passwordHash,
+            role = "user",
+            rut = rut
+        )
+        userDao.insertUser(newUser)
+        firebaseRepository.registerUser(newUser) // Sync con Firebase al crear
+        Log.d(TAG, "✅ Usuario creado en DB: ${newUser.email} con RUT: $rut")
+        return true
     }
     
     // Método exclusivo para Root para crear Admins
@@ -65,7 +73,8 @@ class UserRepository @Inject constructor(
                 name = name,
                 email = email,
                 passwordHash = passwordHash,
-                role = "admin"
+                role = "admin",
+                rut = "" // Admins no requieren RUT
             )
             userDao.insertUser(newAdmin)
             firebaseRepository.registerUser(newAdmin) // Sync
@@ -170,7 +179,24 @@ class UserRepository @Inject constructor(
     
     suspend fun getAllUsersSync(): List<User> = userDao.getAllUsersSync() // Metodo sincrono para sync
     
-    suspend fun deleteUser(userId: Int) = userDao.deleteUser(userId)
+    suspend fun deleteUser(userId: Int) {
+        // Obtener el usuario antes de eliminarlo para sincronizar con Firebase
+        val user = userDao.getAllUsersSync().find { it.id == userId }
+
+        // Eliminar de Firebase PRIMERO de forma síncrona
+        if (user != null && user.email != "root") {
+            firebaseRepository.deleteUser(user.email)
+            Log.d(TAG, "✅ Usuario eliminado de Firebase: ${user.email}")
+
+            // Esperar un poco para asegurar que Firebase procesó la eliminación
+            kotlinx.coroutines.delay(200)
+        }
+
+        // Eliminar de local DESPUÉS
+        userDao.deleteUser(userId)
+        Log.d(TAG, "✅ Usuario eliminado de BD local: ID=$userId")
+    }
+
     suspend fun getUserCount(): Int = userDao.getUserCount()
     suspend fun nukeUsers() = userDao.deleteAllNonRootUsers()
 }

@@ -2,6 +2,7 @@ package com.example.huertohogar_mobil.viewmodel
 
 import android.net.Uri
 import android.util.Log
+import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.huertohogar_mobil.data.*
@@ -26,6 +27,13 @@ class RootViewModel @Inject constructor(
     private val firebaseRepository: FirebaseRepository
 ) : ViewModel() {
 
+    // Estado explícito de sincronización y error
+    private val _isSyncing = MutableStateFlow(false)
+    val isSyncing = _isSyncing.asStateFlow()
+
+    private val _syncError = MutableStateFlow<String?>(null)
+    val syncError = _syncError.asStateFlow()
+
     // Listas completas (Flows reactivos desde Room)
     val users: StateFlow<List<User>> = userRepository.getAllUsers()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -47,11 +55,28 @@ class RootViewModel @Inject constructor(
     private val _syncHistory = MutableStateFlow<List<String>>(emptyList())
     val syncHistory = _syncHistory.asStateFlow()
 
+    // Últimas sincronizaciones
+    private val _lastCloudSync = MutableStateFlow<String?>(null)
+    val lastCloudSync: StateFlow<String?> = _lastCloudSync.asStateFlow()
+    private val _lastLocalSync = MutableStateFlow<String?>(null)
+    val lastLocalSync: StateFlow<String?> = _lastLocalSync.asStateFlow()
+
+    // Auto-sync cloud
+    private val _autoSyncCloud = MutableStateFlow(false)
+    val autoSyncCloud: StateFlow<Boolean> = _autoSyncCloud.asStateFlow()
+
     init {
         // Inicializamos P2P y Firebase para el usuario Root
         p2pManager.initialize("root")
         firebaseRepository.initialize("root")
         
+        // Sincronización inicial para mostrar timestamps
+        viewModelScope.launch {
+            addToHistory("Sistema Root inicializado")
+            // Realizar sync inicial con la nube para cargar datos
+            sincronizarSoloCloud()
+        }
+
         // Observamos nuevos peers para sincronizar automáticamente (P2P)
         viewModelScope.launch {
             p2pManager.connectedPeers.collect { peers ->
@@ -78,6 +103,8 @@ class RootViewModel @Inject constructor(
         _syncHistory.value = listOf("[$timestamp] $event") + _syncHistory.value
     }
 
+    private fun stampNow(): String = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+
     // Validar autorización root
     fun validarRoot(password: String): Boolean {
         return password == "root"
@@ -93,11 +120,13 @@ class RootViewModel @Inject constructor(
         viewModelScope.launch {
             if (userRepository.createAdmin(safeName, safeEmail, safePass)) {
                 val newUser = User(name = safeName, email = safeEmail, passwordHash = safePass, role = "admin")
-                firebaseRepository.registerUser(newUser) // Sync to Cloud
-                
+                firebaseRepository.registerUser(newUser)
+
                 onSuccess()
                 addToHistory("Creado nuevo admin: $safeEmail")
-                sincronizarDatosConAdmins()
+
+                // Sincronizar con nube y red
+                sincronizarSoloCloud()
             } else {
                 onError()
             }
@@ -139,7 +168,8 @@ class RootViewModel @Inject constructor(
             
             if (success) {
                 firebaseRepository.registerUser(safeUser)
-                sincronizarDatosConAdmins()
+                // Sincronizar con la nube para reflejar cambios inmediatamente
+                sincronizarSoloCloud()
             }
         }
     }
@@ -155,8 +185,16 @@ class RootViewModel @Inject constructor(
         
         viewModelScope.launch {
             userRepository.deleteUser(userId)
-            addToHistory("Usuario eliminado localmente (ID: $userId)")
-            sincronizarDatosConAdmins()
+
+            // Eliminar también de Firebase inmediatamente
+            if (userToDelete != null) {
+                firebaseRepository.deleteUser(userToDelete.email)
+            }
+
+            addToHistory("Usuario eliminado: ${userToDelete?.email ?: "ID: $userId"}")
+
+            // Sincronización completa para reflejar cambios
+            sincronizarSoloCloud()
         }
     }
     
@@ -175,134 +213,189 @@ class RootViewModel @Inject constructor(
              productoRepository.eliminarProducto(producto)
              firebaseRepository.deleteProduct(producto.id, producto.providerEmail)
              addToHistory("Producto eliminado: ${producto.nombre}")
-             sincronizarDatosConAdmins()
+
+             // Sincronizar con la nube para reflejar cambios
+             sincronizarSoloCloud()
         }
     }
 
     // --- SINCRONIZACION ---
     fun sincronizarDatosConAdmins() {
         viewModelScope.launch {
-            val peers = p2pManager.connectedPeers.value
-            Log.d("RootViewModel", "Iniciando Sincronización. Peers encontrados: ${peers.size}")
-            
-            if (peers.isEmpty()) {
-                addToHistory("Sync local omitido: No hay dispositivos WiFi Direct cercanos.")
-            } else {
-                addToHistory("Iniciando envío de datos a ${peers.size} dispositivos cercanos...")
-            }
+            _isSyncing.value = true
+            _syncError.value = null
+            try {
+                val peers = p2pManager.connectedPeers.value
+                Log.d("RootViewModel", "Iniciando Sincronización. Peers encontrados: ${peers.size}")
 
-            // Datos a sincronizar
-            val currentUsers = userRepository.getAllUsersSync()
-            val usersArray = JSONArray()
-            currentUsers.forEach { u ->
-                if (u.role == "root") return@forEach
-
-                val json = JSONObject().apply {
-                    put("name", u.name)
-                    put("email", u.email)
-                    put("role", u.role)
-                    // FIX SEGURIDAD: NO enviar passwordHash por P2P en texto plano.
+                if (peers.isEmpty()) {
+                    addToHistory("Sync local omitido: No hay dispositivos WiFi Direct cercanos.")
+                } else {
+                    addToHistory("Iniciando envío de datos a ${peers.size} dispositivos cercanos...")
                 }
-                usersArray.put(json)
-                
-                // Backup a la nube
-                firebaseRepository.registerUser(u)
-            }
-            
-            val currentProducts = productoRepository.getAllProductosSync()
-            val productsArray = JSONArray()
-            currentProducts.forEach { p ->
-                var productToSend = p
-                
-                // INTENTO DE REPARACIÓN DE IMAGEN LOCAL ANTES DE SUBIR
-                // Si la imagen es local (no empieza con http), intentamos subirla a Firebase Storage
-                val uri = p.imagenUri
-                if (!uri.isNullOrBlank() && !uri.startsWith("http")) {
-                    var uploadSuccess = false
-                    try {
-                        var fileUri: Uri? = null
-                        
-                        if (uri.startsWith("/")) {
-                            val file = File(uri)
-                            if (file.exists()) fileUri = Uri.fromFile(file)
-                            else Log.e("RootViewModel", "Archivo local no encontrado: $uri")
-                        } 
-                        else if (uri.startsWith("file://")) {
-                            val path = uri.removePrefix("file://")
-                            val file = File(path)
-                            if (file.exists()) fileUri = Uri.fromFile(file)
-                            else Log.e("RootViewModel", "Archivo local (file://) no encontrado: $path")
-                        }
-                        else {
-                            fileUri = Uri.parse(uri)
-                        }
 
-                        if (fileUri != null) {
-                            val cloudUrl = firebaseRepository.uploadProductImage(fileUri)
-                            
-                            if (cloudUrl != null) {
-                                 // Actualizamos localmente para tener la URL remota y no re-subir
-                                 productToSend = p.copy(imagenUri = cloudUrl)
-                                 productoRepository.actualizarProducto(productToSend)
-                                 Log.d("RootViewModel", "Imagen local reparada y subida: $cloudUrl")
-                                 uploadSuccess = true
-                            } else {
-                                Log.w("RootViewModel", "Fallo al subir imagen local: $uri")
+                // Datos a sincronizar
+                val currentUsers = userRepository.getAllUsersSync()
+                val usersArray = JSONArray()
+                currentUsers.forEach { u ->
+                    if (u.role == "root") return@forEach
+
+                    val json = JSONObject().apply {
+                        put("name", u.name)
+                        put("email", u.email)
+                        put("role", u.role)
+                        // FIX SEGURIDAD: NO enviar passwordHash por P2P en texto plano.
+                    }
+                    usersArray.put(json)
+
+                    // Backup a la nube
+                    firebaseRepository.registerUser(u)
+                }
+
+                val currentProducts = productoRepository.getAllProductosSync()
+                val productsArray = JSONArray()
+                currentProducts.forEach { p ->
+                    var productToSend = p
+
+                    // INTENTO DE REPARACIÓN DE IMAGEN LOCAL ANTES DE SUBIR
+                    // Si la imagen es local (no empieza con http), intentamos subirla a Firebase Storage
+                    val uri = p.imagenUri
+                    if (!uri.isNullOrBlank() && !uri.startsWith("http")) {
+                        var uploadSuccess = false
+                        try {
+                            var fileUri: Uri? = null
+
+                            if (uri.startsWith("/")) {
+                                val file = File(uri)
+                                if (file.exists()) fileUri = Uri.fromFile(file)
+                                else Log.e("RootViewModel", "Archivo local no encontrado: $uri")
+                            }
+                            else if (uri.startsWith("file://")) {
+                                val path = uri.removePrefix("file://")
+                                val file = File(path)
+                                if (file.exists()) fileUri = Uri.fromFile(file)
+                                else Log.e("RootViewModel", "Archivo local (file://) no encontrado: $path")
+                            }
+                            else {
+                                // Reemplazo de Uri.parse por extensión KTX
+                                fileUri = uri.toUri()
+                            }
+
+                            if (fileUri != null) {
+                                val cloudUrl = firebaseRepository.uploadProductImage(fileUri)
+
+                                if (cloudUrl != null) {
+                                     // Actualizamos localmente para tener la URL remota y no re-subir
+                                     productToSend = p.copy(imagenUri = cloudUrl)
+                                     productoRepository.actualizarProducto(productToSend)
+                                     Log.d("RootViewModel", "Imagen local reparada y subida: $cloudUrl")
+                                     uploadSuccess = true
+                                } else {
+                                    Log.w("RootViewModel", "Fallo al subir imagen local: $uri")
                             }
                         }
-                    } catch (e: Exception) {
-                        Log.e("RootViewModel", "Error al procesar imagen: $uri", e)
+                        } catch (e: Exception) {
+                            Log.e("RootViewModel", "Error al procesar imagen: $uri", e)
+                        }
+
+                        // LÓGICA STRICTA: Si sigue siendo local (falló subida), la eliminamos del objeto a enviar
+                        // para NO contaminar la nube ni a otros usuarios.
+                        if (!uploadSuccess) {
+                            Log.e("RootViewModel", "⚠️ SANEAMIENTO: Eliminando referencia local $uri antes de sincronizar.")
+                            productToSend = productToSend.copy(imagenUri = null)
+                        }
                     }
 
-                    // LÓGICA STRICTA: Si sigue siendo local (falló subida), la eliminamos del objeto a enviar
-                    // para NO contaminar la nube ni a otros usuarios.
-                    if (!uploadSuccess) {
-                        Log.e("RootViewModel", "⚠️ SANEAMIENTO: Eliminando referencia local $uri antes de sincronizar.")
-                        productToSend = productToSend.copy(imagenUri = null)
+                    val json = JSONObject().apply {
+                        put("id", productToSend.id)
+                        put("nombre", productToSend.nombre)
+                        put("precio", productToSend.precioCLP)
+                        put("unidad", productToSend.unidad)
+                        put("descripcion", productToSend.descripcion)
+                        put("imagenRes", productToSend.imagenRes)
+                        put("imagenUri", productToSend.imagenUri)
+                        put("providerEmail", productToSend.providerEmail)
                     }
+                    productsArray.put(json)
+
+                    // Sincronización Cloud: Root respalda TODOS los productos en la nube.
+                    firebaseRepository.upsertProduct(
+                        productToSend.id,
+                        productToSend.nombre,
+                        productToSend.precioCLP,
+                        productToSend.unidad,
+                        productToSend.descripcion,
+                        productToSend.imagenRes,
+                        productToSend.imagenUri,
+                        productToSend.providerEmail
+                    )
                 }
-                
-                val json = JSONObject().apply {
-                    put("id", productToSend.id)
-                    put("nombre", productToSend.nombre)
-                    put("precio", productToSend.precioCLP)
-                    put("unidad", productToSend.unidad)
-                    put("descripcion", productToSend.descripcion)
-                    put("imagenRes", productToSend.imagenRes)
-                    put("imagenUri", productToSend.imagenUri)
-                    put("providerEmail", productToSend.providerEmail)
+
+                // Sincronización LOCAL (P2P)
+                peers.forEach { peerEmail ->
+                    val payload = JSONObject().apply {
+                        put("type", "ADMIN_SYNC_DATA")
+                        put("senderEmail", "root")
+                        put("senderName", "Super Usuario")
+                        put("receiverEmail", peerEmail)
+                        put("users", usersArray)
+                        put("products", productsArray)
+                    }
+
+                    p2pManager.sendMessageJsonDirect(peerEmail, payload)
+                    addToHistory("Datos enviados localmente a $peerEmail")
                 }
-                productsArray.put(json)
-                
-                // Sincronización Cloud: Root respalda TODOS los productos en la nube.
-                firebaseRepository.upsertProduct(
-                    productToSend.id, 
-                    productToSend.nombre, 
-                    productToSend.precioCLP, 
-                    productToSend.unidad, 
-                    productToSend.descripcion, 
-                    productToSend.imagenRes, 
-                    productToSend.imagenUri, 
-                    productToSend.providerEmail
-                )
-            }
-            
-            // Sincronización LOCAL (P2P)
-            peers.forEach { peerEmail ->
-                val payload = JSONObject().apply {
-                    put("type", "ADMIN_SYNC_DATA")
-                    put("senderEmail", "root")
-                    put("senderName", "Super Usuario")
-                    put("receiverEmail", peerEmail)
-                    put("users", usersArray)
-                    put("products", productsArray)
-                }
-                
-                p2pManager.sendMessageJsonDirect(peerEmail, payload)
-                addToHistory("Datos enviados localmente a $peerEmail")
-            }
-            
-            addToHistory("Sincronización en la nube completada.")
+
+                addToHistory("Sincronización en la nube completada.")
+                _lastLocalSync.value = stampNow()
+             } catch (e: Exception) {
+                 _syncError.value = e.message
+                 addToHistory("Error en sincronización: ${e.message}")
+                 Log.e("RootViewModel", "Sync error", e)
+                // Aún registramos un timestamp para visibilidad de intento
+                _lastLocalSync.value = _lastLocalSync.value ?: stampNow()
+             } finally {
+                 _isSyncing.value = false
+             }
+         }
+     }
+
+     // --- SINCRONIZACION CLOUD ---
+     fun sincronizarSoloCloud() {
+         viewModelScope.launch {
+             _isSyncing.value = true
+             _syncError.value = null
+             addToHistory("Iniciando sincronización SOLO nube...")
+             try {
+                 val currentUsers = userRepository.getAllUsersSync()
+                 val currentProducts = productoRepository.getAllProductosSync()
+
+                 // Sincronización completa bidireccional (incluye eliminaciones)
+                 firebaseRepository.syncAllUsers(currentUsers)
+                 firebaseRepository.syncAllProducts(currentProducts)
+
+                 val stamp = stampNow()
+                 _lastCloudSync.value = stamp
+                 addToHistory("Sincronización con la nube completada a ${'$'}stamp.")
+                 addToHistory("${currentUsers.size} usuarios y ${currentProducts.size} productos sincronizados")
+             } catch (e: Exception) {
+                 _syncError.value = e.message
+                 addToHistory("Error en sincronización nube: ${e.message}")
+                 Log.e("RootViewModel", "Cloud sync error", e)
+                // Aún marcamos el intento
+                _lastCloudSync.value = _lastCloudSync.value ?: stampNow()
+             } finally {
+                 _isSyncing.value = false
+             }
+         }
+     }
+
+    fun setAutoSyncCloud(enabled: Boolean) {
+        _autoSyncCloud.value = enabled
+        addToHistory(if (enabled) "Auto-sync nube ACTIVADO" else "Auto-sync nube DESACTIVADO")
+        if (enabled) {
+            // Trigger inmediato para que no quede atrasado
+            sincronizarSoloCloud()
         }
     }
 }

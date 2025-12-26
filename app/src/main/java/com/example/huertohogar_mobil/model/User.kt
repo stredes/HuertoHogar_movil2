@@ -13,5 +13,6 @@ data class User(
     val name: String = "",
     val email: String = "",
     val passwordHash: String = "",
-    val role: String = "user" // "admin" o "user"
+    val role: String = "user", // "admin" o "user"
+    val rut: String = "" // RUT del usuario con formato: 12345678-K
 )

@@ -28,8 +28,9 @@ import com.example.huertohogar_mobil.ui.components.HuertoIconButton
 import com.example.huertohogar_mobil.ui.components.HuertoSearchField
 import com.example.huertohogar_mobil.ui.components.SectionHeader
 import com.example.huertohogar_mobil.viewmodel.SocialViewModel
-import com.example.huertohogar_mobil.navigation.Routes
-import androidx.navigation.NavController
+
+// Enum de filtro local para SocialHub
+private enum class SocialRolFiltro { TODOS, USUARIOS, ADMINISTRADORES }
 
 @Composable
 fun SocialHubScreen(
@@ -51,6 +52,7 @@ fun SocialHubScreen(
     val unreadCounts by viewModel.unreadCounts.collectAsStateWithLifecycle()
     
     var query by remember { mutableStateOf("") }
+    var filtro by remember { mutableStateOf(SocialRolFiltro.TODOS) }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         SectionHeader(title = "Buzón y Comunidad", centered = false)
@@ -66,7 +68,37 @@ fun SocialHubScreen(
             placeholder = "Buscar personas..."
         )
 
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Controles de filtro por rol
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = filtro == SocialRolFiltro.TODOS,
+                onClick = { filtro = SocialRolFiltro.TODOS },
+                label = { Text("Todos") }
+            )
+            FilterChip(
+                selected = filtro == SocialRolFiltro.USUARIOS,
+                onClick = { filtro = SocialRolFiltro.USUARIOS },
+                label = { Text("Usuarios") }
+            )
+            FilterChip(
+                selected = filtro == SocialRolFiltro.ADMINISTRADORES,
+                onClick = { filtro = SocialRolFiltro.ADMINISTRADORES },
+                label = { Text("Administradores") }
+            )
+        }
+
         Spacer(modifier = Modifier.height(16.dp))
+
+        // Funciones auxiliares de filtrado
+        fun pasaFiltro(user: User): Boolean {
+            return when (filtro) {
+                SocialRolFiltro.TODOS -> true
+                SocialRolFiltro.USUARIOS -> user.role != "admin"
+                SocialRolFiltro.ADMINISTRADORES -> user.role == "admin"
+            }
+        }
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -74,10 +106,11 @@ fun SocialHubScreen(
         ) {
             // 1. Resultados de Búsqueda
             if (query.isNotEmpty()) {
+                val resultadosFiltrados = resultadosBusqueda.filter { pasaFiltro(it) }
                 item {
                     Text("Resultados de búsqueda", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                 }
-                items(resultadosBusqueda) { user ->
+                items(resultadosFiltrados) { user ->
                     PersonaItem(
                         user = user, 
                         isFriend = false, 
@@ -85,11 +118,11 @@ fun SocialHubScreen(
                         actionIcon = Icons.Default.PersonAdd
                     )
                 }
-                if (resultadosBusqueda.isEmpty()) {
-                    item { Text("No se encontraron usuarios.", style = MaterialTheme.typography.bodyMedium) }
+                if (resultadosFiltrados.isEmpty()) {
+                    item { Text("No se encontraron usuarios para este filtro.", style = MaterialTheme.typography.bodyMedium) }
                 }
             } else {
-                // 2. Solicitudes Pendientes (Buzón)
+                // 2. Solicitudes Pendientes (Buzón) - no se filtran por rol (son solicitudes a ti)
                 if (solicitudes.isNotEmpty()) {
                     item {
                         Text("Solicitudes de Amistad", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
@@ -105,17 +138,18 @@ fun SocialHubScreen(
                 }
 
                 // 3. Mis Chats / Amigos (Combinado en chatsDisplay)
+                val chatsFiltrados = chats.filter { pasaFiltro(it) }
                 item {
                     Text("Mis Conversaciones y Amigos", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                 }
-                if (chats.isEmpty()) {
+                if (chatsFiltrados.isEmpty()) {
                     item {
                         Box(modifier = Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
-                            Text("Aún no tienes amigos o conversaciones.", color = MaterialTheme.colorScheme.secondary)
+                            Text("No hay resultados para este filtro.", color = MaterialTheme.colorScheme.secondary)
                         }
                     }
                 } else {
-                    items(chats) { chatUser ->
+                    items(chatsFiltrados) { chatUser ->
                         val unread = unreadCounts[chatUser.id] ?: 0
                         PersonaItem(
                             user = chatUser, 
@@ -134,7 +168,7 @@ fun SocialHubScreen(
 @Composable
 fun PersonaItem(
     user: User, 
-    isFriend: Boolean, 
+    @Suppress("UNUSED_PARAMETER") isFriend: Boolean,
     unreadCount: Int = 0,
     onAction: () -> Unit,
     actionIcon: androidx.compose.ui.graphics.vector.ImageVector

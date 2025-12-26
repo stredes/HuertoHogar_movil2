@@ -26,30 +26,21 @@ class PedidoRepositoryImpl @Inject constructor(
             Log.d(TAG, "🔍 Configurando listener para pedidos del comprador: $email")
             val listener = firestore.collection("pedidos")
                 .whereEqualTo("compradorEmail", email)
-                .orderBy("fechaPedido", Query.Direction.DESCENDING)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
                         Log.e(TAG, "❌ Error escuchando pedidos del comprador", error)
-                        close(error)
+                        trySend(emptyList())
                         return@addSnapshotListener
                     }
 
-                    val pedidos = snapshot?.toObjects(Pedido::class.java) ?: emptyList()
+                    val pedidos = (snapshot?.toObjects(Pedido::class.java) ?: emptyList())
+                        .sortedByDescending { it.fechaPedido }
                     Log.d(TAG, "📦 Pedidos del comprador recibidos: ${pedidos.size}")
                     pedidos.forEach { pedido ->
                         Log.d(TAG, "   - ${pedido.pedidoId}: ${pedido.estado} para proveedor ${pedido.proveedorEmail}")
                     }
 
-                    // Guardar en Room de forma asíncrona sin bloquear
-                    launch {
-                        pedidos.forEach { pedido ->
-                            try {
-                                pedidoDao.insertPedido(pedido)
-                            } catch (e: Exception) {
-                                Log.w(TAG, "Error guardando pedido en Room: ${e.message}")
-                            }
-                        }
-                    }
+                    // Desactivado Room: Firestore es la fuente de verdad
 
                     if (!trySend(pedidos).isSuccess) {
                         Log.w(TAG, "No se pudo enviar pedidos del comprador")
@@ -71,30 +62,21 @@ class PedidoRepositoryImpl @Inject constructor(
             Log.d(TAG, "🔍 Configurando listener para pedidos del proveedor: $email")
             val listener = firestore.collection("pedidos")
                 .whereEqualTo("proveedorEmail", email)
-                .orderBy("fechaPedido", Query.Direction.DESCENDING)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
                         Log.e(TAG, "❌ Error escuchando pedidos del proveedor", error)
-                        close(error)
+                        trySend(emptyList())
                         return@addSnapshotListener
                     }
 
-                    val pedidos = snapshot?.toObjects(Pedido::class.java) ?: emptyList()
+                    val pedidos = (snapshot?.toObjects(Pedido::class.java) ?: emptyList())
+                        .sortedByDescending { it.fechaPedido }
                     Log.d(TAG, "📦 Pedidos del proveedor recibidos: ${pedidos.size}")
                     pedidos.forEach { pedido ->
                         Log.d(TAG, "   - ${pedido.pedidoId}: ${pedido.estado} de ${pedido.compradorEmail}")
                     }
 
-                    // Guardar en Room de forma asíncrona sin bloquear
-                    launch {
-                        pedidos.forEach { pedido ->
-                            try {
-                                pedidoDao.insertPedido(pedido)
-                            } catch (e: Exception) {
-                                Log.w(TAG, "Error guardando pedido en Room: ${e.message}")
-                            }
-                        }
-                    }
+                    // Desactivado Room: Firestore es la fuente de verdad
 
                     if (!trySend(pedidos).isSuccess) {
                         Log.w(TAG, "No se pudo enviar pedidos del proveedor")
@@ -138,15 +120,7 @@ class PedidoRepositoryImpl @Inject constructor(
                         Log.d(TAG, "   - ${pedido.pedidoId}: de ${pedido.compradorNombre} (\$${pedido.totalCLP})")
                     }
 
-                    launch {
-                        pedidos.forEach { pedido ->
-                            try {
-                                pedidoDao.insertPedido(pedido)
-                            } catch (e: Exception) {
-                                Log.w(TAG, "Error guardando pedido en Room: ${e.message}")
-                            }
-                        }
-                    }
+                    // Desactivado Room: Firestore es la fuente de verdad
 
                     if (!trySend(pedidos).isSuccess) {
                         Log.w(TAG, "No se pudo enviar pedidos pendientes")
@@ -168,26 +142,18 @@ class PedidoRepositoryImpl @Inject constructor(
             val listener = firestore.collection("pedidos")
                 .whereEqualTo("proveedorEmail", email)
                 .whereEqualTo("estado", "LISTO_DESPACHO")
-                .orderBy("fechaPedido", Query.Direction.ASCENDING)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
                         Log.e(TAG, "Error escuchando pedidos listos", error)
-                        close(error)
+                        trySend(emptyList())
                         return@addSnapshotListener
                     }
 
-                    val pedidos = snapshot?.toObjects(Pedido::class.java) ?: emptyList()
+                    val pedidos = (snapshot?.toObjects(Pedido::class.java) ?: emptyList())
+                        .sortedBy { it.fechaPedido }
                     Log.d(TAG, "Pedidos listos para despacho: ${pedidos.size}")
 
-                    launch {
-                        pedidos.forEach { pedido ->
-                            try {
-                                pedidoDao.insertPedido(pedido)
-                            } catch (e: Exception) {
-                                Log.w(TAG, "Error guardando pedido en Room: ${e.message}")
-                            }
-                        }
-                    }
+                    // Desactivado Room: Firestore es la fuente de verdad
 
                     if (!trySend(pedidos).isSuccess) {
                         Log.w(TAG, "No se pudo enviar pedidos listos")
@@ -266,8 +232,7 @@ class PedidoRepositoryImpl @Inject constructor(
             // 1. Guardar en Firebase
             firestore.collection("pedidos").document(pedido.pedidoId).set(pedido).await()
 
-            // 2. Guardar en Room
-            pedidoDao.insertPedido(pedido)
+            // Desactivado Room: Firestore es la fuente de verdad
 
             // 3. Crear notificación para el proveedor en la colección de mensajes
             try {

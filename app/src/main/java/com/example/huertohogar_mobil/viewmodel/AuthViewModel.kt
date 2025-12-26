@@ -56,15 +56,16 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    fun register(name: String, email: String, passwordHash: String) {
+    fun register(name: String, email: String, passwordHash: String, rut: String) {
         // Limpiamos los datos: quitamos espacios y normalizamos el email
         val safeName = name.trim()
         val safeEmail = email.trim().lowercase()
         val safePassword = passwordHash.trim()
+        val safeRut = rut.trim().uppercase()
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
-            val success = userRepository.registerUser(safeName, safeEmail, safePassword)
+            val success = userRepository.registerUser(safeName, safeEmail, safePassword, safeRut)
             if (success) {
                 // Registrar también en Firebase para sincronización
                 val user = userRepository.getUser(safeEmail)
@@ -75,7 +76,7 @@ class AuthViewModel @Inject constructor(
                 // Intentamos loguear automáticamente con las credenciales limpias
                 login(safeEmail, safePassword)
             } else {
-                _uiState.update { it.copy(isLoading = false, error = "El usuario ya existe") }
+                _uiState.update { it.copy(isLoading = false, error = "El usuario ya existe o el RUT ya está registrado") }
             }
         }
     }

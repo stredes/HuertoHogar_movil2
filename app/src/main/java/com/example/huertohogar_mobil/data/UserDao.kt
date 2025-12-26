@@ -13,6 +13,9 @@ interface UserDao {
     @Query("SELECT * FROM users WHERE id = :id LIMIT 1")
     suspend fun getUserById(id: Int): User?
 
+    @Query("SELECT * FROM users WHERE rut = :rut COLLATE NOCASE LIMIT 1")
+    suspend fun getUserByRut(rut: String): User?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertUser(user: User)
     
@@ -32,7 +35,7 @@ interface UserDao {
     @Query("SELECT * FROM users WHERE role != 'root'")
     fun getAllUsers(): Flow<List<User>>
     
-    @Query("SELECT * FROM users")
+    @Query("SELECT * FROM users WHERE role != 'root'")
     suspend fun getAllUsersSync(): List<User>
 
     @Query("SELECT * FROM users WHERE role = 'admin'")

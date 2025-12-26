@@ -16,7 +16,7 @@ import com.example.huertohogar_mobil.model.*
         Solicitud::class,
         Pedido::class
     ],
-    version = 15,
+    version = 16,
     exportSchema = true
 )
 @TypeConverters(Converters::class)

@@ -96,10 +96,29 @@ class MainActivity : ComponentActivity() {
                 
                 val showBottomBar = currentRoute !in listOf(
                     Routes.IniciarSesion.route,
-                    Routes.Registrarse.route
+                    Routes.Registrarse.route,
+                    Routes.CompletarPerfil.route
                 ) && currentRoute?.startsWith("edit_user") != true
 
                 val currentUserEmail = authState.user?.email // Capturamos email actual
+
+                // Verificar si el usuario necesita completar su perfil (RUT faltante)
+                // Solo usuarios normales requieren RUT, no admins ni root
+                val necesitaCompletarPerfil = authState.user != null &&
+                    authState.user!!.role == "user" &&
+                    authState.user!!.rut.isEmpty()
+
+                // Redirigir a CompletarPerfil si es necesario
+                LaunchedEffect(necesitaCompletarPerfil, currentRoute) {
+                    if (necesitaCompletarPerfil &&
+                        currentRoute != Routes.CompletarPerfil.route &&
+                        currentRoute != Routes.IniciarSesion.route &&
+                        currentRoute != Routes.Registrarse.route) {
+                        navController.navigate(Routes.CompletarPerfil.route) {
+                            popUpTo(Routes.Inicio.route) { inclusive = true }
+                        }
+                    }
+                }
 
                 // FIX: Lanzar Servicio en Foreground cuando el usuario está listo y permisos concedidos
                 LaunchedEffect(authState.user, permissionsGranted) {
@@ -337,9 +356,11 @@ class MainActivity : ComponentActivity() {
                             RootUsersScreen(
                                 onNavigateEdit = { id -> navController.navigate(Routes.EditUser.create(id)) },
                                 onNavigateCreate = { navController.navigate(Routes.EditUser.create(null)) },
-                                onNavigateDashboard = { navController.navigate(Routes.RootDashboard.route) {
-                                    popUpTo(Routes.RootDashboard.route) { inclusive = true }
-                                }},
+                                onNavigateDashboard = {
+                                    navController.navigate(Routes.RootDashboard.route) {
+                                        popUpTo(Routes.RootDashboard.route) { inclusive = false }
+                                    }
+                                },
                                 onBack = { navController.popBackStack() }
                             )
                         }
@@ -387,6 +408,17 @@ class MainActivity : ComponentActivity() {
                              EditProfileScreen(
                                  viewModel = authVm,
                                  onBack = { navController.popBackStack() }
+                             )
+                        }
+
+                        composable(Routes.CompletarPerfil.route) {
+                             CompletarPerfilScreen(
+                                 viewModel = authVm,
+                                 onPerfilCompletado = {
+                                     navController.navigate(Routes.Inicio.route) {
+                                         popUpTo(Routes.CompletarPerfil.route) { inclusive = true }
+                                     }
+                                 }
                              )
                         }
 

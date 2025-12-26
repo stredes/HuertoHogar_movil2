@@ -17,6 +17,7 @@ import com.example.huertohogar_mobil.model.Pedido
 import com.example.huertohogar_mobil.ui.components.HuertoButton
 import com.example.huertohogar_mobil.ui.components.HuertoTopBar
 import com.example.huertohogar_mobil.viewmodel.PedidoViewModel
+import com.example.huertohogar_mobil.viewmodel.PedidoUiState
 import org.json.JSONArray
 import java.text.SimpleDateFormat
 import java.util.*
@@ -29,6 +30,8 @@ fun MisPedidosScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var pedidoParaPago by remember { mutableStateOf<Pedido?>(null) }
+    var tabSeleccionado by remember { mutableIntStateOf(0) }
+    val tabs = listOf("Activos", "Historial")
 
     Scaffold(
         topBar = {
@@ -39,59 +42,30 @@ fun MisPedidosScreen(
             )
         }
     ) { paddingValues ->
-        PullToRefreshBox(
-            isRefreshing = uiState.isLoading,
-            onRefresh = { viewModel.refresh() },
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            if (uiState.isLoading && uiState.misPedidos.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator()
+            // Tabs
+            TabRow(selectedTabIndex = tabSeleccionado) {
+                tabs.forEachIndexed { index, title ->
+                    Tab(
+                        selected = tabSeleccionado == index,
+                        onClick = { tabSeleccionado = index },
+                        text = { Text(title) }
+                    )
                 }
-            } else if (uiState.misPedidos.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            "No tienes pedidos aún",
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                        Text(
-                            "Desliza hacia abajo para refrescar",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(uiState.misPedidos, key = { it.pedidoId }) { pedido ->
-                        PedidoCard(
-                            pedido = pedido,
-                            esProveedor = false,
-                            onAccion = { accion ->
-                                when (accion) {
-                                    "SELECCIONAR_PAGO" -> pedidoParaPago = pedido
-                                    "CONFIRMAR_ENTREGA" -> viewModel.confirmarEntrega(pedido.pedidoId)
-                                    "CANCELAR" -> viewModel.cancelarPedido(pedido.pedidoId)
-                                }
-                            }
-                        )
-                    }
+            }
+
+            PullToRefreshBox(
+                isRefreshing = uiState.isLoading,
+                onRefresh = { viewModel.refresh() },
+                modifier = Modifier.fillMaxSize()
+            ) {
+                when (tabSeleccionado) {
+                    0 -> MostrarPedidosActivos(uiState, viewModel) { pedidoParaPago = it }
+                    1 -> MostrarHistorialPedidos(uiState)
                 }
             }
         }
@@ -99,23 +73,112 @@ fun MisPedidosScreen(
         // Mostrar errores
         uiState.error?.let { error ->
             LaunchedEffect(error) {
-                SnackbarHostState().showSnackbar("Error: $error")
-                viewModel.clearError()
+                // Mostrar snackbar o diálogo de error si lo necesitas
+            }
+        }
+
+        if (pedidoParaPago != null) {
+            SeleccionarMetodoPagoDialog(
+                pedido = pedidoParaPago!!,
+                onDismiss = { pedidoParaPago = null },
+                onConfirmar = { metodo, datosTransferencia ->
+                    viewModel.seleccionarMetodoPago(pedidoParaPago!!.pedidoId, metodo, datosTransferencia)
+                    viewModel.marcarComoPagado(pedidoParaPago!!.pedidoId)
+                    pedidoParaPago = null
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun MostrarPedidosActivos(
+    uiState: PedidoUiState,
+    viewModel: PedidoViewModel,
+    onSeleccionarPago: (Pedido) -> Unit
+) {
+    if (uiState.isLoading && uiState.misPedidosActivos.isEmpty()) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator()
+        }
+    } else if (uiState.misPedidosActivos.isEmpty()) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    "No tienes pedidos activos",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Text(
+                    "Tus pedidos completados aparecerán en el historial",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    } else {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(uiState.misPedidosActivos, key = { it.pedidoId }) { pedido ->
+                PedidoCard(
+                    pedido = pedido,
+                    esProveedor = false,
+                    onAccion = { accion ->
+                        when (accion) {
+                            "SELECCIONAR_PAGO" -> onSeleccionarPago(pedido)
+                            "CONFIRMAR_ENTREGA" -> viewModel.confirmarEntrega(pedido.pedidoId)
+                            "CANCELAR" -> viewModel.cancelarPedido(pedido.pedidoId)
+                        }
+                    }
+                )
             }
         }
     }
+}
 
-    // Diálogo de selección de método de pago
-    pedidoParaPago?.let { pedido ->
-        SeleccionarMetodoPagoDialog(
-            pedido = pedido,
-            onDismiss = { pedidoParaPago = null },
-            onConfirmar = { metodo, datosTransferencia ->
-                viewModel.seleccionarMetodoPago(pedido.pedidoId, metodo, datosTransferencia)
-                viewModel.marcarComoPagado(pedido.pedidoId)
-                pedidoParaPago = null
+@Composable
+private fun MostrarHistorialPedidos(uiState: PedidoUiState) {
+    if (uiState.misPedidosHistorial.isEmpty()) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    "Sin historial de pedidos",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Text(
+                    "Los pedidos completados aparecerán aquí",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
-        )
+        }
+    } else {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(uiState.misPedidosHistorial, key = { it.pedidoId }) { pedido ->
+                PedidoCardHistorial(pedido = pedido)
+            }
+        }
     }
 }
 
@@ -663,3 +726,91 @@ fun SeleccionarMetodoPagoDialog(
     )
 }
 
+@Composable
+fun PedidoCardHistorial(pedido: Pedido) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Proveedor: ${pedido.proveedorEmail}",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "ID: ${pedido.pedidoId.take(12)}...",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
+                EstadoChip(estado = pedido.estado)
+            }
+
+            HorizontalDivider()
+
+            // Detalles del pedido
+            val detalles = parseDetallePedido(pedido.detalleJson)
+            Text("Productos:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
+            detalles.forEach { detalle ->
+                Text(
+                    text = "• ${detalle.cantidad}x ${detalle.nombre}",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+
+            HorizontalDivider()
+
+            // Total
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Total: ${formatoCLP(pedido.totalCLP)}",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = formatFecha(pedido.fechaPedido),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            // Información adicional si está disponible
+            if (!pedido.metodoPago.isNullOrBlank()) {
+                Text(
+                    text = "Pago: ${pedido.metodoPago}",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+
+            // Fecha de entrega si existe
+            if (pedido.fechaEntrega != null && pedido.fechaEntrega!! > 0) {
+                Text(
+                    text = "Entregado: ${formatFecha(pedido.fechaEntrega!!)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+            }
+        }
+    }
+}

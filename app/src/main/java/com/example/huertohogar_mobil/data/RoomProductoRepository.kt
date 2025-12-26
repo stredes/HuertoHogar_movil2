@@ -9,7 +9,8 @@ import javax.inject.Inject
 private const val TAG = "DB_DEBUG_PRODUCTOS"
 
 class RoomProductoRepository @Inject constructor(
-    private val productoDao: ProductoDao
+    private val productoDao: ProductoDao,
+    private val firebaseRepository: FirebaseRepository
 ) : ProductoRepository {
     
     override fun productos(): Flow<List<Producto>> = productoDao.getAllProductos()
@@ -50,6 +51,19 @@ class RoomProductoRepository @Inject constructor(
         try {
             productoDao.insert(producto)
             Log.d(TAG, "✅ Producto guardado exitosamente en SQLite: ${producto.id}")
+
+            // Sincronizar con Firebase inmediatamente
+            firebaseRepository.upsertProduct(
+                producto.id,
+                producto.nombre,
+                producto.precioCLP,
+                producto.unidad,
+                producto.descripcion,
+                producto.imagenRes,
+                producto.imagenUri,
+                producto.providerEmail
+            )
+            Log.d(TAG, "✅ Producto sincronizado con Firebase")
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error guardando producto: ${e.message}")
             throw e
@@ -60,12 +74,29 @@ class RoomProductoRepository @Inject constructor(
         Log.d(TAG, "Intentando actualizar producto: ${producto.nombre}")
         productoDao.update(producto)
         Log.d(TAG, "✅ Producto actualizado exitosamente")
+
+        // Sincronizar con Firebase inmediatamente
+        firebaseRepository.upsertProduct(
+            producto.id,
+            producto.nombre,
+            producto.precioCLP,
+            producto.unidad,
+            producto.descripcion,
+            producto.imagenRes,
+            producto.imagenUri,
+            producto.providerEmail
+        )
+        Log.d(TAG, "✅ Producto sincronizado con Firebase")
     }
 
     override suspend fun eliminarProducto(producto: Producto) {
         Log.d(TAG, "Intentando eliminar producto: ${producto.nombre}")
         productoDao.delete(producto)
         Log.d(TAG, "✅ Producto eliminado exitosamente")
+
+        // Sincronizar eliminación con Firebase inmediatamente
+        firebaseRepository.deleteProduct(producto.id, producto.providerEmail)
+        Log.d(TAG, "✅ Producto eliminado de Firebase")
     }
     
     override suspend fun getProductCount(): Int {

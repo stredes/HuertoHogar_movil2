@@ -661,7 +661,7 @@ class FirebaseRepository @Inject constructor(
             ?.set(hashMapOf("lastSeen" to System.currentTimeMillis()), SetOptions.merge())
     }
 
-    private fun syncUsers(myEmail: String) {
+    fun syncUsers(myEmail: String) {
         userListener = db?.collection(COLLECTION_USERS)?.addSnapshotListener { snapshots, _ ->
             snapshots?.documentChanges?.forEach { change ->
                 val doc = change.document
@@ -734,7 +734,7 @@ class FirebaseRepository @Inject constructor(
         }
     }
 
-    private fun syncProducts() {
+    fun syncProducts() {
         productListener = db?.collection(COLLECTION_PRODUCTS)?.addSnapshotListener { snapshots, _ ->
             snapshots?.documentChanges?.forEach { change ->
                 ioScope.launch {
@@ -748,6 +748,70 @@ class FirebaseRepository @Inject constructor(
                     }
                 }
             }
+        }
+    }
+
+    fun registerUser(user: User) {
+        if (user.role == "root") return
+        db?.collection(COLLECTION_USERS)?.document(user.email)?.set(user, SetOptions.merge())
+    }
+
+    fun deleteUser(email: String) {
+        if (email == "root") return
+        db?.collection(COLLECTION_USERS)?.document(email)?.delete()
+    }
+
+    suspend fun syncAllUsers(users: List<User>) {
+        if (currentEmail != "root") return
+        try {
+            // 1. Obtener todos los usuarios actuales en Firebase
+            val cloudUsers = db?.collection(COLLECTION_USERS)?.get()?.await()
+            val cloudEmails = cloudUsers?.documents?.map { it.id }?.toSet() ?: emptySet()
+
+            // 2. Subir/actualizar usuarios locales (excepto root)
+            val localEmails = users.filter { it.role != "root" }.map { it.email }.toSet()
+            users.forEach { user ->
+                if (user.role != "root") {
+                    registerUser(user)
+                }
+            }
+
+            // 3. Eliminar usuarios que están en cloud pero no en local
+            val toDelete = cloudEmails - localEmails - setOf("root")
+            toDelete.forEach { email ->
+                deleteUser(email)
+                Log.d(TAG, "Eliminado de Firebase: $email")
+            }
+
+            Log.d(TAG, "Sincronización completa: ${users.size} usuarios locales, ${toDelete.size} eliminados de cloud")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error en syncAllUsers", e)
+        }
+    }
+
+    suspend fun syncAllProducts(products: List<Producto>) {
+        if (currentEmail != "root") return
+        try {
+            // 1. Obtener todos los productos en Firebase
+            val cloudProducts = db?.collection(COLLECTION_PRODUCTS)?.get()?.await()
+            val cloudIds = cloudProducts?.documents?.map { it.id }?.toSet() ?: emptySet()
+
+            // 2. Subir/actualizar productos locales
+            val localIds = products.map { it.id }.toSet()
+            products.forEach { p ->
+                upsertProduct(p.id, p.nombre, p.precioCLP, p.unidad, p.descripcion, p.imagenRes, p.imagenUri, p.providerEmail)
+            }
+
+            // 3. Eliminar productos que están en cloud pero no en local
+            val toDelete = cloudIds - localIds
+            toDelete.forEach { id ->
+                db?.collection(COLLECTION_PRODUCTS)?.document(id)?.delete()
+                Log.d(TAG, "Producto eliminado de Firebase: $id")
+            }
+
+            Log.d(TAG, "Sincronización completa: ${products.size} productos locales, ${toDelete.size} eliminados de cloud")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error en syncAllProducts", e)
         }
     }
 
@@ -777,11 +841,6 @@ class FirebaseRepository @Inject constructor(
         } catch (e: Exception) { null }
     }
 
-    fun registerUser(user: User) {
-        if (user.role == "root") return
-        db?.collection(COLLECTION_USERS)?.document(user.email)?.set(user, SetOptions.merge())
-    }
-    
     suspend fun getUserDirectly(email: String): User? {
         return try {
             val doc = db?.collection(COLLECTION_USERS)?.document(email)?.get()?.await()

@@ -53,5 +53,6 @@ sealed class Routes(val route: String) {
     
     // Ruta Usuario
     data object EditProfile : Routes("edit_profile")
+    data object CompletarPerfil : Routes("completar_perfil")
     data object MisPedidos : Routes("mis_pedidos")
 }
