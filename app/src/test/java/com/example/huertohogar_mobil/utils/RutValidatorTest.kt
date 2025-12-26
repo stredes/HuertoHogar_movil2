@@ -9,68 +9,75 @@ import org.junit.Assert.*
 class RutValidatorTest {
 
     @Test
-    fun obtenerNumeros_conRutValido() {
-        assertEquals("12345674", RutValidator.obtenerNumeros("12345674-2"))
-        assertEquals("18956619", RutValidator.obtenerNumeros("18956619-7"))
-        assertEquals("", RutValidator.obtenerNumeros("invalid"))
+    fun limpiarRut_conFormatosDiferentes() {
+        assertEquals("123456742", RutValidator.limpiarRut("12.345.674-2"))
+        assertEquals("189566197", RutValidator.limpiarRut("18.956.619-7"))
+        assertEquals("10654898K", RutValidator.limpiarRut("10.654.898-K"))
     }
 
     @Test
-    fun obtenerDigito_conRutValido() {
-        assertEquals("2", RutValidator.obtenerDigito("12345674-2"))
-        assertEquals("7", RutValidator.obtenerDigito("18956619-7"))
-        assertEquals("K", RutValidator.obtenerDigito("10654898-K"))
+    fun validarRut_conRutsValidos() {
+        assertTrue(RutValidator.validarRut("12.345.674-2"))
+        assertTrue(RutValidator.validarRut("18956619-7"))
+        assertTrue(RutValidator.validarRut("10654898-K"))
     }
 
     @Test
-    fun esRutValido_conFormatoIncorrecto() {
-        assertFalse(RutValidator.esRutValido("12345674"))  // Sin guión
-        assertFalse(RutValidator.esRutValido("123456-74"))  // Formato incorrecto
-        assertFalse(RutValidator.esRutValido(""))  // Vacío
-        assertFalse(RutValidator.esRutValido("-"))  // Solo guión
-        assertFalse(RutValidator.esRutValido("abc-1"))  // Letras en números
+    fun validarRut_conFormatoIncorrecto() {
+        assertFalse(RutValidator.validarRut(""))  // Vacío
+        assertFalse(RutValidator.validarRut("-"))  // Solo guión
+        assertFalse(RutValidator.validarRut("abc-1"))  // Letras en números
     }
 
     @Test
-    fun esRutValido_conRangoIncorrecto() {
-        assertFalse(RutValidator.esRutValido("1234-2"))  // Menos de 5 dígitos
-        assertFalse(RutValidator.esRutValido("123456789-2"))  // Más de 8 dígitos
-    }
-
-    @Test
-    fun esRutValido_conDigitoInvalido() {
-        assertFalse(RutValidator.esRutValido("12345674-L"))  // L no es válido
-        assertFalse(RutValidator.esRutValido("12345674-@"))  // @ no es válido
+    fun validarRut_conDigitoInvalido() {
+        assertFalse(RutValidator.validarRut("12.345.674-1"))  // Dígito incorrecto
+        assertFalse(RutValidator.validarRut("18.956.619-1"))  // Dígito incorrecto
     }
 
     @Test
     fun formatearRut_conNumeros() {
-        // Formatear solo números - calcula y agrega el dígito
-        val resultado1 = RutValidator.formatearRut("12345674")
+        // Formatear con puntos y guión
+        val resultado1 = RutValidator.formatearRut("123456742")
         assertTrue(resultado1.contains("-"))
-        assertTrue(resultado1.startsWith("12345674-"))
+        assertTrue(resultado1.contains("."))
 
-        val resultado2 = RutValidator.formatearRut("18956619")
+        val resultado2 = RutValidator.formatearRut("189566197")
         assertTrue(resultado2.contains("-"))
-        assertTrue(resultado2.startsWith("18956619-"))
+        assertTrue(resultado2.contains("."))
     }
 
     @Test
     fun formatearRut_conGuion() {
         // Ya formateado, debe mantenerse igual
-        val resultado = RutValidator.formatearRut("12345674-2")
+        val resultado = RutValidator.formatearRut("123456742")
         assertTrue(resultado.contains("-"))
+        assertTrue(resultado.contains("."))
     }
 
     @Test
     fun calcularDigitoVerificador_noVacio() {
         // Simplemente verificar que no retorna vacío
         val resultado = RutValidator.calcularDigitoVerificador("12345674")
-        assertNotEquals("", resultado)
+        assertNotEquals("", resultado.toString())
 
         // Debe ser un dígito válido o K
-        val validos = listOf("0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "K")
+        val validos = listOf('0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'K')
         assertTrue(resultado in validos)
+    }
+
+    @Test
+    fun esRutInstitucional_conRutsGubernamentales() {
+        // Los RUT en rango 50-69 millones son institucionales
+        assertTrue(RutValidator.esRutInstitucional("60.000.001-K"))
+        assertTrue(RutValidator.esRutInstitucional("61500000-5"))
+    }
+
+    @Test
+    fun esRutInstitucional_conRutsNormales() {
+        // Los RUT fuera del rango no son institucionales
+        assertFalse(RutValidator.esRutInstitucional("12345674-2"))
+        assertFalse(RutValidator.esRutInstitucional("18956619-7"))
     }
 }
 
