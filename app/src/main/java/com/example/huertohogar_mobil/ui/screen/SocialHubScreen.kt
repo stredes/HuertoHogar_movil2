@@ -9,6 +9,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -156,7 +158,8 @@ fun SocialHubScreen(
                             isFriend = true, // Visualmente similar a amigo
                             unreadCount = unread,
                             onAction = { onChatClick(chatUser.id) },
-                            actionIcon = Icons.AutoMirrored.Filled.Message
+                            actionIcon = Icons.AutoMirrored.Filled.Message,
+                            onDelete = { viewModel.eliminarAmigo(chatUser) } // Añadir la acción de eliminar
                         )
                     }
                 }
@@ -167,12 +170,15 @@ fun SocialHubScreen(
 
 @Composable
 fun PersonaItem(
-    user: User, 
-    @Suppress("UNUSED_PARAMETER") isFriend: Boolean,
+    user: User,
+    isFriend: Boolean,
     unreadCount: Int = 0,
     onAction: () -> Unit,
-    actionIcon: androidx.compose.ui.graphics.vector.ImageVector
+    actionIcon: androidx.compose.ui.graphics.vector.ImageVector,
+    onDelete: (() -> Unit)? = null // Hacer el onDelete opcional
 ) {
+    var mostrarOpciones by remember { mutableStateOf(false) }
+
     HuertoCard(
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -181,7 +187,7 @@ fun PersonaItem(
             verticalAlignment = Alignment.CenterVertically
         ) {
             HuertoAvatar(name = user.name)
-            
+
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(user.name, fontWeight = FontWeight.Bold)
@@ -190,7 +196,7 @@ fun PersonaItem(
                     Text("Administrador", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
                 }
             }
-            
+
             // Burbuja de mensajes no leídos
             if (unreadCount > 0) {
                  Box(
@@ -209,7 +215,28 @@ fun PersonaItem(
                  }
                  Spacer(modifier = Modifier.width(8.dp))
             }
-            
+
+            if (isFriend && onDelete != null) {
+                Box {
+                    IconButton(onClick = { mostrarOpciones = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "Opciones")
+                    }
+                    DropdownMenu(
+                        expanded = mostrarOpciones,
+                        onDismissRequest = { mostrarOpciones = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Eliminar Amigo") },
+                            onClick = {
+                                onDelete()
+                                mostrarOpciones = false
+                            },
+                            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) }
+                        )
+                    }
+                }
+            }
+
             HuertoIconButton(onClick = onAction) {
                 Icon(
                     imageVector = actionIcon,
@@ -220,6 +247,7 @@ fun PersonaItem(
         }
     }
 }
+
 
 @Composable
 fun SolicitudItem(

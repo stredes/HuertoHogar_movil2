@@ -146,7 +146,10 @@ class FirebaseRepository @Inject constructor(
             syncProducts()
             registerUserOnline(email)
             
-            migrateLegacyMessages(email) 
+            // ✅ NUEVO: Sincronizar estado inicial de lectura de mensajes desde Firebase
+            syncReadStatusFromCloud(email)
+
+            migrateLegacyMessages(email)
         }
     }
 
@@ -175,13 +178,30 @@ class FirebaseRepository @Inject constructor(
      * Soporta timestamp explícito para sincronización perfecta con P2P.
      */
     suspend fun sendMessage(sender: User, receiverEmail: String, content: String, type: String = "CHAT", localTimestamp: Long? = null): Boolean {
-        val db = db ?: return false
+        Log.d(TAG, "📤 sendMessage iniciado")
+        Log.d(TAG, "   - De: ${sender.email} (ID: ${sender.id})")
+        Log.d(TAG, "   - Para: $receiverEmail")
+        Log.d(TAG, "   - Tipo: $type")
+        Log.d(TAG, "   - Contenido: ${content.take(50)}")
+
+        val db = db ?: run {
+            Log.e(TAG, "❌ Firebase DB no inicializado")
+            return false
+        }
+
         // Preparar IDs locales para estado de ticks
-        val receiver = userDao.getUserByEmail(receiverEmail) ?: getUserDirectly(receiverEmail)?.also { userDao.insertUser(it) }?.let { userDao.getUserByEmail(receiverEmail) }
+        val receiver = userDao.getUserByEmail(receiverEmail) ?: getUserDirectly(receiverEmail)?.also {
+            Log.d(TAG, "   Receiver no encontrado localmente, obtenido de Firebase")
+            userDao.insertUser(it)
+        }?.let { userDao.getUserByEmail(receiverEmail) }
+
         val timestamp = localTimestamp ?: System.currentTimeMillis()
 
-        // Inserción local: ENVIANDO (un tick)
-        if (receiver != null) {
+        Log.d(TAG, "   - Receiver encontrado: ${receiver != null} (ID: ${receiver?.id})")
+        Log.d(TAG, "   - Timestamp: $timestamp")
+
+        // Inserción local: ENVIANDO (un tick) - SOLO PARA CHATS, NO PARA FRIEND_REQUEST
+        if (receiver != null && type == "CHAT") {
             val remitenteId = sender.id
             val destinatarioId = receiver.id
             if (remitenteId > 0 && destinatarioId > 0 && !socialDao.existeMensaje(remitenteId, destinatarioId, timestamp, content)) {
@@ -195,6 +215,7 @@ class FirebaseRepository @Inject constructor(
                     estado = EstadoMensaje.ENVIANDO
                 )
                 socialDao.insertMensaje(localMsg)
+                Log.d(TAG, "   Mensaje local insertado (ENVIANDO)")
             }
         }
 
@@ -202,6 +223,9 @@ class FirebaseRepository @Inject constructor(
             val msgId = UUID.randomUUID().toString()
             val chatId = getChatId(sender.email, receiverEmail)
             
+            Log.d(TAG, "   - MsgID generado: $msgId")
+            Log.d(TAG, "   - ChatID: $chatId")
+
             val messageData = hashMapOf(
                 "id" to msgId,
                 "chatId" to chatId,
@@ -215,13 +239,18 @@ class FirebaseRepository @Inject constructor(
                 "read" to false
             )
 
+            Log.d(TAG, "   Creando batch write en Firebase...")
             val batch = db.batch()
+
+            // Historial del chat
             val historyMsgRef = db.collection(COLLECTION_CHATS_HISTORY)
                 .document(chatId)
                 .collection(SUBCOLLECTION_MENSAJES)
                 .document(msgId)
             batch.set(historyMsgRef, messageData)
+            Log.d(TAG, "   - Añadido a batch: chats_history/$chatId/mensajes/$msgId")
 
+            // Resumen del chat
             val chatSummaryRef = db.collection(COLLECTION_CHATS_HISTORY).document(chatId)
             val summaryData = hashMapOf(
                 "lastMessage" to content,
@@ -230,17 +259,21 @@ class FirebaseRepository @Inject constructor(
                 "lastSender" to sender.email
             )
             batch.set(chatSummaryRef, summaryData, SetOptions.merge())
+            Log.d(TAG, "   - Añadido a batch: chats_history/$chatId (summary)")
 
+            // Inbox (para notificaciones)
             val inboxRef = db.collection(COLLECTION_MESSAGES_INBOX).document(msgId)
             batch.set(inboxRef, messageData)
+            Log.d(TAG, "   - Añadido a batch: messages/$msgId")
 
+            Log.d(TAG, "   Ejecutando batch commit...")
             kotlinx.coroutines.withTimeout(3000L) {
                 batch.commit().await()
             }
-            Log.d(TAG, "Mensaje enviado a Cloud (ID: $msgId)")
+            Log.d(TAG, "✅ Mensaje enviado a Cloud exitosamente (ID: $msgId)")
 
-            // Actualización local: ENVIADO (doble tick gris)
-            if (receiver != null && sender.id > 0 && receiver.id > 0) {
+            // Actualización local: ENVIADO (doble tick gris) - SOLO PARA CHATS
+            if (receiver != null && sender.id > 0 && receiver.id > 0 && type == "CHAT") {
                 socialDao.updateEstadoPorContenido(
                     remitenteId = sender.id,
                     destinatarioId = receiver.id,
@@ -248,12 +281,15 @@ class FirebaseRepository @Inject constructor(
                     contenido = content,
                     nuevoEstado = EstadoMensaje.ENVIADO
                 )
+                Log.d(TAG, "   Estado local actualizado a ENVIADO")
             }
             true
         } catch (e: Exception) {
-            Log.e(TAG, "Fallo envío Cloud (Timeout o Error): ${e.message}")
-            // Actualización local: ERROR si falló el envío
-            if (receiver != null && sender.id > 0 && receiver.id > 0) {
+            Log.e(TAG, "❌ Fallo envío Cloud: ${e.javaClass.simpleName} - ${e.message}")
+            e.printStackTrace()
+
+            // Actualización local: ERROR si falló el envío - SOLO PARA CHATS
+            if (receiver != null && sender.id > 0 && receiver.id > 0 && type == "CHAT") {
                 socialDao.updateEstadoPorContenido(
                     remitenteId = sender.id,
                     destinatarioId = receiver.id,
@@ -331,37 +367,53 @@ class FirebaseRepository @Inject constructor(
                 }
                 batch?.commit()?.await()
                 
-                // Actualizar localmente también para que desaparezcan las burbujas
-                // NOTA: Esto se debería hacer vía callback, pero lo hacemos aquí para consistencia
-                val senderEmail = unreadQuery.documents.firstOrNull()?.getString("senderEmail")
-                if (senderEmail != null) {
-                     val sender = userDao.getUserByEmail(senderEmail)
-                     val me = userDao.getUserByEmail(myEmail)
-                     if (sender != null && me != null) {
-                         socialDao.markAsRead(sender.id, me.id)
-                     }
+                Log.d(TAG, "✅ Marcados ${unreadQuery.size()} mensajes como leídos en Firebase")
+
+                // Actualizar localmente todos los mensajes de este chat
+                try {
+                    val senderEmail = unreadQuery.documents.firstOrNull()?.getString("senderEmail")
+                    if (senderEmail != null) {
+                        val sender = userDao.getUserByEmail(senderEmail)
+                        val me = userDao.getUserByEmail(myEmail)
+                        if (sender != null && me != null) {
+                            // ✅ MEJORADO: Marcar todos como leídos con más detalles de log
+                            socialDao.markAsRead(sender.id, me.id)
+                            Log.d(TAG, "✅ Burbujas de chat sincronizadas: ${sender.email} → $myEmail")
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error actualizando estado local de lectura: ${e.message}")
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error marcando leídos", e)
+            Log.e(TAG, "Error marcando leídos en Firebase", e)
         }
     }
 
-    /**
-     * Listener GLOBAL (Notificaciones)
-     */
     private fun startGlobalInboxListener(myEmail: String) {
-        Log.d(TAG, "Iniciando listener global (Inbox) para: $myEmail")
-        
+        globalMessageListener?.remove()
+
+        Log.d(TAG, "🔧 Iniciando listener global (Inbox) para: $myEmail")
+
         globalMessageListener = db?.collection(COLLECTION_MESSAGES_INBOX)
             ?.whereEqualTo("receiverEmail", myEmail)
             ?.addSnapshotListener { snapshots, e ->
-                if (e != null) return@addSnapshotListener
-                
+                if (e != null) {
+                    Log.e(TAG, "❌ Error en listener global: ${e.message}")
+                    return@addSnapshotListener
+                }
+
+                Log.d(TAG, "📬 Listener global activado - Cambios detectados: ${snapshots?.documentChanges?.size ?: 0}")
+
                 snapshots?.documentChanges?.forEach { change ->
                     if (change.type == DocumentChange.Type.ADDED) {
-                        ioScope.launch { 
-                            processIncomingMessage(change.document, myEmail, isFromActiveChat = false) 
+                        val doc = change.document
+                        val type = doc.data["type"] as? String ?: "UNKNOWN"
+                        val sender = doc.data["senderEmail"] as? String ?: "UNKNOWN"
+                        Log.d(TAG, "📨 Nuevo mensaje detectado - Tipo: $type, De: $sender")
+
+                        ioScope.launch {
+                            processIncomingMessage(doc, myEmail, isFromActiveChat = false)
                         }
                     }
                 }
@@ -373,23 +425,18 @@ class FirebaseRepository @Inject constructor(
             ?.whereArrayContains("participants", myEmail)
             ?.addSnapshotListener { snapshots, e ->
                 if (e != null) return@addSnapshotListener
-                
+
                 snapshots?.documentChanges?.forEach { change ->
                     ioScope.launch {
                         val data = change.document.data
                         val participants = data["participants"] as? List<String> ?: return@launch
                         val otherEmail = participants.firstOrNull { it != myEmail } ?: return@launch
-                        
+
+                        // Al detectar un nuevo chat, solo nos aseguramos de que el otro usuario
+                        // exista en la base de datos local para poder mostrar su información.
+                        // NO se crea una amistad aquí.
                         if (userDao.getUserByEmail(otherEmail) == null) {
                             getUserDirectly(otherEmail)?.let { userDao.insertUser(it) }
-                        }
-                        
-                        val me = userDao.getUserByEmail(myEmail)
-                        val other = userDao.getUserByEmail(otherEmail)
-                        
-                        if (me != null && other != null && !socialDao.esAmigo(me.id, other.id)) {
-                             socialDao.agregarAmigo(Amistad(me.id, other.id))
-                             socialDao.agregarAmigo(Amistad(other.id, me.id))
                         }
                     }
                 }
@@ -410,24 +457,49 @@ class FirebaseRepository @Inject constructor(
     private suspend fun processIncomingMessage(doc: DocumentSnapshot, myEmail: String, isFromActiveChat: Boolean) {
         val docId = doc.id
         
+        Log.d(TAG, "🔍 processIncomingMessage iniciado")
+        Log.d(TAG, "   - DocID: $docId")
+        Log.d(TAG, "   - isFromActiveChat: $isFromActiveChat")
+        Log.d(TAG, "   - myEmail: $myEmail")
+
         // 1. FILTRO DE MEMORIA (Sesión actual)
         // Si ya procesamos este ID y no estamos forzando una actualización (active chat), salimos.
-        if (!isFromActiveChat && !processedMessageIds.add(docId)) return
+        if (!isFromActiveChat && !processedMessageIds.add(docId)) {
+            Log.d(TAG, "⏭️ Mensaje ya procesado (cache), saltando...")
+            return
+        }
 
-        val data = doc.data ?: return
-        val senderEmail = data["senderEmail"] as? String ?: return
+        val data = doc.data
+        if (data == null) {
+            Log.w(TAG, "⚠️ Documento sin data, saltando...")
+            return
+        }
+
+        val senderEmail = data["senderEmail"] as? String
         val senderName = data["senderName"] as? String ?: senderEmail
         val content = data["content"] as? String ?: ""
         val type = data["type"] as? String ?: "CHAT"
         val timestamp = (data["timestamp"] as? Long) ?: System.currentTimeMillis()
         
+        Log.d(TAG, "📋 Datos del mensaje:")
+        Log.d(TAG, "   - De: $senderEmail")
+        Log.d(TAG, "   - Nombre: $senderName")
+        Log.d(TAG, "   - Tipo: $type")
+        Log.d(TAG, "   - Contenido: ${content.take(50)}...")
+        Log.d(TAG, "   - Timestamp: $timestamp")
+
+        if (senderEmail == null) {
+            Log.e(TAG, "❌ senderEmail es null, no se puede procesar")
+            return
+        }
+
         // Variable CLOUD para controlar notificación
         val isReadInCloud = (data["read"] as? Boolean) ?: false
         val chatId = data["chatId"] as? String ?: getChatId(senderEmail, myEmail)
 
         var sender = userDao.getUserByEmail(senderEmail)
         if (sender == null) {
-            val newUser = User(name = senderName, email = senderEmail, passwordHash = "firebase_sender")
+            val newUser = User(name = senderName ?: senderEmail, email = senderEmail, passwordHash = "firebase_sender")
             userDao.insertUser(newUser)
             sender = userDao.getUserByEmail(senderEmail)
         }
@@ -505,6 +577,8 @@ class FirebaseRepository @Inject constructor(
             }
             "FRIEND_REQUEST" -> {
                 Log.d(TAG, "📨 Procesando FRIEND_REQUEST de ${sender.email} para ${me.email}")
+                Log.d(TAG, "   - Sender ID: ${sender.id}, Me ID: ${me.id}")
+                Log.d(TAG, "   - Timestamp: $timestamp, DocID: $docId")
 
                 // ✨ VALIDACIÓN CENTRALIZADA con NotificationRouter
                 val canReceive = notificationRouter.canSendNotification(
@@ -520,7 +594,18 @@ class FirebaseRepository @Inject constructor(
 
                 Log.d(TAG, "✅ NotificationRouter aprobó FRIEND_REQUEST")
 
+                // Verificar si ya existe la solicitud en BD local
+                val solicitudExistente = socialDao.getSolicitud(sender.email, me.email)
+                if (solicitudExistente != null) {
+                    Log.d(TAG, "⚠️ Ya existe solicitud ID: ${solicitudExistente.id}, estado: ${solicitudExistente.estado}")
+                    if (solicitudExistente.estado == "PENDIENTE") {
+                        Log.d(TAG, "   La solicitud ya está pendiente, no se crea duplicado")
+                        return
+                    }
+                }
+
                 // Crear la solicitud
+                Log.d(TAG, "💾 Insertando solicitud en BD local...")
                 val solicitud = Solicitud(
                     id = 0,
                     senderName = sender.name,
@@ -529,7 +614,9 @@ class FirebaseRepository @Inject constructor(
                     timestamp = timestamp,
                     estado = "PENDIENTE"
                 )
-                socialDao.insertSolicitud(solicitud)
+                val solicitudId = socialDao.insertSolicitud(solicitud)
+                Log.d(TAG, "✅ Solicitud insertada con ID: $solicitudId")
+
                 showNotification("Solicitud de Amistad", "${sender.name} quiere conectar")
             }
             "REQUEST_ACCEPTED" -> {
@@ -583,8 +670,8 @@ class FirebaseRepository @Inject constructor(
             }
             "CONTACT_FORM" -> {
                 val fecha = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date(timestamp))
-                mensajeDao.insertMensaje(MensajeContacto(0, senderName, senderEmail, content, fecha, false))
-                showNotification("Soporte/Contacto", "$senderName envió un formulario")
+                mensajeDao.insertMensaje(MensajeContacto(0, senderName ?: senderEmail, senderEmail, content, fecha, false))
+                showNotification("Soporte/Contacto", "${senderName ?: senderEmail} envió un formulario")
             }
         }
     }
@@ -661,6 +748,55 @@ class FirebaseRepository @Inject constructor(
             ?.set(hashMapOf("lastSeen" to System.currentTimeMillis()), SetOptions.merge())
     }
 
+    /**
+     * ✅ NUEVA FUNCIÓN: Sincronizar estado de lectura de mensajes desde Firebase
+     * Se ejecuta al inicializar la sesión para asegurar que las burbujas estén correctas
+     */
+    private suspend fun syncReadStatusFromCloud(myEmail: String) {
+        try {
+            val me = userDao.getUserByEmail(myEmail) ?: return
+
+            // Obtener todos los chats del usuario
+            val chatsSnapshot = db?.collection(COLLECTION_CHATS_HISTORY)
+                ?.whereArrayContains("participants", myEmail)
+                ?.get()
+                ?.await() ?: return
+
+            chatsSnapshot.documents.forEach { chatDoc ->
+                val chatId = chatDoc.id
+                val participants = chatDoc.get("participants") as? List<String> ?: return@forEach
+                val otherEmail = participants.firstOrNull { it != myEmail } ?: return@forEach
+
+                // Obtener todos los mensajes del chat
+                val messagesSnapshot = db?.collection(COLLECTION_CHATS_HISTORY)
+                    ?.document(chatId)
+                    ?.collection(SUBCOLLECTION_MENSAJES)
+                    ?.get()
+                    ?.await() ?: return@forEach
+
+                val sender = userDao.getUserByEmail(otherEmail) ?: return@forEach
+
+                messagesSnapshot.documents.forEach { msgDoc ->
+                    val isRead = (msgDoc.get("read") as? Boolean) ?: false
+                    val senderEmailInMsg = msgDoc.getString("senderEmail") ?: ""
+                    val receiverEmail = msgDoc.getString("receiverEmail") ?: ""
+                    val timestamp = (msgDoc.get("timestamp") as? Long) ?: System.currentTimeMillis()
+
+                    // Solo sincronizar mensajes recibidos por el usuario actual que ya están leídos en cloud
+                    if (receiverEmail == myEmail && isRead && senderEmailInMsg == otherEmail) {
+                        // Marcar como leído localmente
+                        socialDao.markAsRead(sender.id, me.id)
+                        Log.d(TAG, "✅ Estado de lectura sincronizado: mensaje de $otherEmail marcado como leído")
+                    }
+                }
+            }
+
+            Log.d(TAG, "🔄 Sincronización de estado de lectura completada para: $myEmail")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error sincronizando estado de lectura desde cloud", e)
+        }
+    }
+
     fun syncUsers(myEmail: String) {
         userListener = db?.collection(COLLECTION_USERS)?.addSnapshotListener { snapshots, _ ->
             snapshots?.documentChanges?.forEach { change ->
@@ -671,13 +807,18 @@ class FirebaseRepository @Inject constructor(
                     val passwordHash = doc.getString("passwordHash") ?: ""
                     val name = doc.getString("name") ?: "-"
                     val role = doc.getString("role") ?: "user"
-                    
+                    val rut = doc.getString("rut") ?: "" // ✅ SINCRONIZAR RUT
+
                     val existing = userDao.getUserByEmail(userEmail)
                     if (existing != null) {
                         val finalPass = if (existing.passwordHash == "synced" && passwordHash.isNotEmpty()) passwordHash else existing.passwordHash
                         userDao.updateUserByEmail(name, userEmail, finalPass, role)
+                        // ✅ ACTUALIZAR RUT SI EXISTE EN CLOUD
+                        if (rut.isNotEmpty() && existing.rut.isEmpty()) {
+                            userDao.updateUserRut(userEmail, rut)
+                        }
                     } else {
-                        userDao.insertUser(User(0, name, userEmail, passwordHash, role))
+                        userDao.insertUser(User(0, name, userEmail, passwordHash, role, rut))
                     }
                 }
             }
@@ -730,6 +871,23 @@ class FirebaseRepository @Inject constructor(
             } else false
         } catch (e: Exception) {
             Log.e(TAG, "Error adding friend in cloud", e)
+            false
+        }
+    }
+
+    suspend fun removeFriendInCloud(myEmail: String, friendEmail: String): Boolean {
+        return try {
+            val batch = db?.batch()
+            val meRef = db?.collection(COLLECTION_USERS)?.document(myEmail)?.collection(COLLECTION_FRIENDS)?.document(friendEmail)
+            val friendRef = db?.collection(COLLECTION_USERS)?.document(friendEmail)?.collection(COLLECTION_FRIENDS)?.document(myEmail)
+            if (batch != null && meRef != null && friendRef != null) {
+                batch.delete(meRef)
+                batch.delete(friendRef)
+                batch.commit().await()
+                true
+            } else false
+        } catch (e: Exception) {
+            Log.e(TAG, "Error removing friend in cloud", e)
             false
         }
     }
@@ -846,7 +1004,8 @@ class FirebaseRepository @Inject constructor(
             val doc = db?.collection(COLLECTION_USERS)?.document(email)?.get()?.await()
             if (doc != null && doc.exists()) {
                 val passwordHash = doc.getString("passwordHash") ?: ""
-                User(0, doc.getString("name") ?: "-", doc.id, passwordHash, doc.getString("role") ?: "user")
+                val rut = doc.getString("rut") ?: "" // ✅ RECUPERAR RUT
+                User(0, doc.getString("name") ?: "-", doc.id, passwordHash, doc.getString("role") ?: "user", rut)
             } else null
         } catch (e: Exception) { null }
     }

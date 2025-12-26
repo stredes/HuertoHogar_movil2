@@ -25,30 +25,16 @@ fun RutTextField(
     enabled: Boolean = true,
     readOnly: Boolean = false
 ) {
-    var textoFormateado by remember { mutableStateOf(value) }
-
-    LaunchedEffect(value) {
-        if (value != RutValidator.limpiarRut(textoFormateado)) {
-            textoFormateado = if (value.length >= 2) {
-                RutValidator.formatearRut(value)
-            } else {
-                value
-            }
-        }
-    }
-
     Column(modifier = modifier) {
         OutlinedTextField(
-            value = textoFormateado,
+            value = value,
             onValueChange = { nuevoValor ->
-                val limpio = RutValidator.limpiarRut(nuevoValor)
-                if (limpio.length <= 9 && limpio.all { it.isDigit() || it == 'K' }) {
-                    textoFormateado = if (limpio.length >= 2) {
-                        RutValidator.formatearRut(limpio)
-                    } else {
-                        limpio
-                    }
-                    onValueChange(limpio)
+                // ✅ SIMPLE: Solo aceptar números, sin formateo en tiempo real
+                val soloNumeros = nuevoValor.filter { it.isDigit() }
+
+                // Limitar a 9 caracteres máximo (8 dígitos + 1 dígito verificador)
+                if (soloNumeros.length <= 9) {
+                    onValueChange(soloNumeros)
                 }
             },
             label = { Text(label) },
@@ -57,12 +43,24 @@ fun RutTextField(
             enabled = enabled,
             readOnly = readOnly,
             keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Text,
+                // ✅ SOLO TECLADO NUMÉRICO
+                keyboardType = KeyboardType.Number,
                 imeAction = ImeAction.Next
             ),
             singleLine = true,
-            placeholder = { Text("12.345.678-9") }
+            placeholder = { Text("189566197") }
         )
+
+        // 💡 Mostrar ayuda visual de formateo (sin alterar la entrada)
+        if (value.isNotEmpty()) {
+            val rutFormateado = RutValidator.formatearRutDisplay(value)
+            Text(
+                text = "Formato: $rutFormateado",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 16.dp, top = 4.dp)
+            )
+        }
 
         if (isError && errorMessage != null) {
             Text(
@@ -73,9 +71,10 @@ fun RutTextField(
             )
         }
 
-        if (!isError && textoFormateado.isNotEmpty() && enabled && !readOnly) {
-            val esValido = RutValidator.validarRut(textoFormateado)
-            val esInstitucional = if (esValido) RutValidator.esRutInstitucional(textoFormateado) else false
+        // ✅ Validación visual (solo si el RUT tiene contenido)
+        if (!isError && value.isNotEmpty() && enabled && !readOnly) {
+            val esValido = RutValidator.validarRut(value)
+            val esInstitucional = if (esValido) RutValidator.esRutInstitucional(value) else false
 
             when {
                 esInstitucional -> {
@@ -94,7 +93,7 @@ fun RutTextField(
                         modifier = Modifier.padding(start = 16.dp, top = 4.dp)
                     )
                 }
-                else -> {
+                value.length >= 8 -> {
                     Text(
                         text = "✗ RUT inválido",
                         color = MaterialTheme.colorScheme.error,
@@ -106,4 +105,6 @@ fun RutTextField(
         }
     }
 }
+
+
 

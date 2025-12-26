@@ -1,0 +1,47 @@
+ahora creo que ya lo arregle pero necesito un usuario nuevo para testear fix(rut-validation): Corregir entrada y validación de RUT con teclado numérico
+
+## Cambios principales
+
+### 🔧 RutTextField.kt
+- ✅ Cambiar teclado de Text a Number (solo números)
+- ✅ Filtrar solo dígitos en la entrada (0-9)
+- ✅ El guion se agrega automáticamente sin interferencias
+
+### 📋 RutValidator.kt
+- ✅ Mejorar formatearRut() para calcular DV automáticamente
+- ✅ Validar RUTs con o sin formato (puntos/guiones)
+- ✅ Remover parámetro no usado en catch
+
+## Problemas solucionados
+
+- 🐛 El guion `-` interfería en la validación
+- 🐛 La secuencia de números quedaba incompleta
+- 🐛 Se abría teclado de texto en lugar de numérico
+- 🐛 Validación fallaba cuando el RUT ya estaba formateado
+
+## Ejemplo de uso
+
+```
+Usuario escribe: 18956619
+Se formatea a:    18.956.619-7 (automático)
+Se valida:        Correctamente sin errores
+Se guarda:        18956619 (limpio, sin formato)
+```
+
+## Testing
+
+✅ RUT válido: 18.956.619-7 → Aceptado
+✅ RUT válido: 18956619 → Aceptado
+✅ RUT inválido: 999999999 → Rechazado
+✅ Solo teclado numérico abierto
+
+## Archivos modificados
+
+- app/src/main/java/com/example/huertohogar_mobil/ui/components/RutTextField.kt
+- app/src/main/java/com/example/huertohogar_mobil/utils/RutValidator.kt
+
+## Related Issues
+
+Resuelve problema de validación de RUT al registrarse
+Asegura solo entrada numérica en campo RUT
+

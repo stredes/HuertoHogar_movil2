@@ -176,11 +176,21 @@ class SocialRepositoryImpl @Inject constructor(
     override suspend fun enviarSolicitudAmistad(destinatario: User) {
         val user = _currentUser.value ?: return
         
+        Log.d(TAG, "========================================")
+        Log.d(TAG, "🚀 INICIANDO ENVÍO DE SOLICITUD DE AMISTAD")
+        Log.d(TAG, "   De: ${user.email} (ID: ${user.id})")
+        Log.d(TAG, "   Para: ${destinatario.email} (ID: ${destinatario.id})")
+        Log.d(TAG, "========================================")
+
         var destinatarioFinal = destinatario
         if (destinatario.id == 0) {
+             Log.d(TAG, "⚠️ Destinatario con ID=0, insertando en BD local...")
              val tempUser = destinatario.copy(passwordHash = "p2p_guest")
              userDao.insertUser(tempUser)
-             userDao.getUserByEmail(destinatario.email)?.let { destinatarioFinal = it }
+             userDao.getUserByEmail(destinatario.email)?.let {
+                 destinatarioFinal = it
+                 Log.d(TAG, "✅ Destinatario insertado con ID: ${it.id}")
+             }
         }
         
         Log.d(TAG, "🔍 Intentando enviar solicitud de ${user.email} a ${destinatarioFinal.email}")
@@ -194,16 +204,21 @@ class SocialRepositoryImpl @Inject constructor(
 
         if (!canSend) {
             Log.d(TAG, "🚫 NotificationRouter bloqueó la solicitud")
+            Log.d(TAG, "========================================")
             return
         }
 
         Log.d(TAG, "✅ NotificationRouter aprobó el envío")
+        Log.d(TAG, "📤 Enviando mensaje a Firebase...")
 
         // PROTOCOLO FIREBASE FIRST: Prioridad Cloud para persistencia
         var success = firebaseRepository.sendMessage(user, destinatarioFinal.email, "Hola, quiero ser tu amigo", "FRIEND_REQUEST")
         
+        Log.d(TAG, "   Firebase: ${if (success) "✅ ÉXITO" else "❌ FALLO"}")
+
         if (!success) {
             // Fallback P2P
+            Log.d(TAG, "📡 Intentando envío por P2P...")
             success = p2pManager.sendMessage(
                 senderName = user.name,
                 senderEmail = user.email,
@@ -211,6 +226,7 @@ class SocialRepositoryImpl @Inject constructor(
                 content = "Hola, quiero ser tu amigo",
                 type = "FRIEND_REQUEST"
             )
+            Log.d(TAG, "   P2P: ${if (success) "✅ ÉXITO" else "❌ FALLO"}")
         }
 
         if (success) {
@@ -219,6 +235,7 @@ class SocialRepositoryImpl @Inject constructor(
         } else {
              Log.e(TAG, "❌ Fallo al enviar solicitud de amistad")
         }
+        Log.d(TAG, "========================================")
     }
 
     override suspend fun aceptarSolicitud(solicitud: Solicitud) {
@@ -302,6 +319,17 @@ class SocialRepositoryImpl @Inject constructor(
 
     override suspend fun rechazarSolicitud(solicitud: Solicitud) {
         socialDao.updateEstadoSolicitud(solicitud.id, "RECHAZADA")
+    }
+
+    override suspend fun eliminarAmigo(amigo: User) {
+        val user = _currentUser.value ?: return
+        
+        // Eliminar de la base de datos local (bidireccional)
+        socialDao.deleteAmigo(user.id, amigo.id)
+        socialDao.deleteAmigo(amigo.id, user.id)
+
+        // Eliminar de Firebase (bidireccional)
+        firebaseRepository.removeFriendInCloud(user.email, amigo.email)
     }
 
     override suspend fun enviarMensaje(destinatarioId: Int, contenido: String, tipoContenido: String) {

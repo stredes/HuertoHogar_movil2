@@ -4,15 +4,21 @@ object RutValidator {
 
     /**
      * Valida un RUT chileno con su dígito verificador
+     * Acepta RUTs con o sin formato (puntos, guiones)
      */
     fun validarRut(rut: String): Boolean {
         val rutLimpio = limpiarRut(rut)
         if (rutLimpio.length < 2) return false
 
+        // El último carácter es el dígito verificador (puede ser número o K)
         val numero = rutLimpio.dropLast(1)
         val digitoVerificador = rutLimpio.last().uppercaseChar()
 
+        // Validar que todos los dígitos sean números
         if (!numero.all { it.isDigit() }) return false
+
+        // Validar que el dígito verificador sea válido (0-9 o K)
+        if (!digitoVerificador.isDigit() && digitoVerificador != 'K') return false
 
         val digitoCalculado = calcularDigitoVerificador(numero)
         return digitoCalculado == digitoVerificador
@@ -52,20 +58,63 @@ object RutValidator {
 
     /**
      * Formatea el RUT con puntos y guión (12.345.678-9)
+     * Si recibe solo números sin dígito verificador, lo calcula automáticamente
      */
     fun formatearRut(rut: String): String {
         val rutLimpio = limpiarRut(rut)
         if (rutLimpio.length < 2) return rut
 
-        val numero = rutLimpio.dropLast(1)
-        val dv = rutLimpio.last()
+        var numero: String
+        var dv: Char
 
+        if (rutLimpio.length <= 8) {
+            // Si tiene 8 números o menos, calcular el dígito verificador
+            numero = rutLimpio
+            dv = calcularDigitoVerificador(numero)
+        } else {
+            // Si tiene 9 caracteres (8 números + 1 DV), extraer ambos
+            numero = rutLimpio.dropLast(1)
+            dv = rutLimpio.last().uppercaseChar()
+        }
+
+        // Formatear con puntos
         val numeroFormateado = numero.reversed()
             .chunked(3)
             .joinToString(".")
             .reversed()
 
         return "$numeroFormateado-$dv"
+    }
+
+    /**
+     * Formatea el RUT SOLO PARA MOSTRAR (ayuda visual)
+     * No afecta la entrada de datos, solo muestra cómo se vería formateado
+     * Ejemplo: 189566197 → 18.956.619-7
+     */
+    fun formatearRutDisplay(rut: String): String {
+        if (rut.length < 2) return rut
+
+        return when {
+            rut.length <= 8 -> {
+                // Si tiene 8 dígitos o menos, calcular DV para mostrar
+                val dv = calcularDigitoVerificador(rut)
+                val numeroFormateado = rut.reversed()
+                    .chunked(3)
+                    .joinToString(".")
+                    .reversed()
+                "$numeroFormateado-$dv"
+            }
+            else -> {
+                // Si tiene 9 dígitos o más, formatear con lo que hay
+                val numero = rut.dropLast(1)
+                val dv = rut.last()
+                val numeroFormateado = numero.reversed()
+                    .chunked(3)
+                    .joinToString(".")
+                    .reversed()
+                "$numeroFormateado-$dv"
+            }
+        }
     }
 
     /**
@@ -88,7 +137,7 @@ object RutValidator {
             // Gobierno/Instituciones: 60.000.000 - 69.999.999
 
             return rutNumero in 50_000_000..69_999_999
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             return false
         }
     }

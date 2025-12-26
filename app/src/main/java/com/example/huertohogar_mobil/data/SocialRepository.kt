@@ -26,6 +26,7 @@ interface SocialRepository {
     suspend fun enviarSolicitudAmistad(destinatario: User)
     suspend fun aceptarSolicitud(solicitud: Solicitud)
     suspend fun rechazarSolicitud(solicitud: Solicitud)
+    suspend fun eliminarAmigo(amigo: User)
     suspend fun enviarMensaje(destinatarioId: Int, contenido: String, tipoContenido: String)
     
     // Nuevas funciones para la arquitectura de chat

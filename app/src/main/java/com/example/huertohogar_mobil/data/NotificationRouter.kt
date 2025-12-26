@@ -22,9 +22,9 @@ class NotificationRouter @Inject constructor(
     private val TAG = "NotificationRouter"
 
     // Cache de notificaciones enviadas recientemente (email_tipo_timestamp)
-    // Se limpia automáticamente después de 5 minutos
+    // Se limpia automáticamente después del tiempo especificado
     private val recentNotifications = mutableMapOf<String, Long>()
-    private val CACHE_DURATION_MS = 5 * 60 * 1000L // 5 minutos
+    private val CACHE_DURATION_MS = 30 * 1000L // 30 segundos (reducido para permitir reintentos)
 
     // Tipos de notificación soportados
     enum class NotificationType {
@@ -80,9 +80,14 @@ class NotificationRouter @Inject constructor(
      * Valida si se puede enviar una solicitud de amistad
      */
     private suspend fun canSendFriendRequest(from: String, to: String): Boolean {
+        Log.d(TAG, "🔍 Validando FRIEND_REQUEST: $from -> $to")
+
         // Obtener usuarios
         val senderUser = userDao.getUserByEmail(from)
         val receiverUser = userDao.getUserByEmail(to)
+
+        Log.d(TAG, "   - Sender encontrado: ${senderUser != null} (ID: ${senderUser?.id})")
+        Log.d(TAG, "   - Receiver encontrado: ${receiverUser != null} (ID: ${receiverUser?.id})")
 
         if (senderUser == null || receiverUser == null) {
             Log.d(TAG, "❌ FRIEND_REQUEST bloqueado: Usuario no encontrado")
@@ -92,6 +97,8 @@ class NotificationRouter @Inject constructor(
         // 1. Verificar si ya son amigos
         val yaAmigos = socialDao.esAmigo(senderUser.id, receiverUser.id) ||
                       socialDao.esAmigo(receiverUser.id, senderUser.id)
+        Log.d(TAG, "   - ¿Ya son amigos?: $yaAmigos")
+
         if (yaAmigos) {
             Log.d(TAG, "❌ FRIEND_REQUEST bloqueado: Ya son amigos")
             return false
@@ -100,6 +107,9 @@ class NotificationRouter @Inject constructor(
         // 2. Verificar solicitudes existentes
         val existenteDirecta = socialDao.getSolicitud(from, to)
         val existenteInversa = socialDao.getSolicitud(to, from)
+
+        Log.d(TAG, "   - Solicitud directa existente: ${existenteDirecta?.let { "ID ${it.id}, estado ${it.estado}" } ?: "ninguna"}")
+        Log.d(TAG, "   - Solicitud inversa existente: ${existenteInversa?.let { "ID ${it.id}, estado ${it.estado}" } ?: "ninguna"}")
 
         if (existenteDirecta != null && existenteDirecta.estado in listOf("PENDIENTE", "ACEPTADA")) {
             Log.d(TAG, "❌ FRIEND_REQUEST bloqueado: Ya existe solicitud directa ${existenteDirecta.estado}")
@@ -113,7 +123,10 @@ class NotificationRouter @Inject constructor(
 
         // 3. Verificar cache reciente
         val cacheKey = "FRIEND_REQUEST_${from}_${to}"
-        if (isInRecentCache(cacheKey)) {
+        val enCache = isInRecentCache(cacheKey)
+        Log.d(TAG, "   - En cache reciente: $enCache")
+
+        if (enCache) {
             Log.d(TAG, "❌ FRIEND_REQUEST bloqueado: Enviado recientemente (cache)")
             return false
         }

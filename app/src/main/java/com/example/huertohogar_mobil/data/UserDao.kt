@@ -26,6 +26,10 @@ interface UserDao {
     @Query("UPDATE users SET name = :name, passwordHash = :passwordHash, role = :role WHERE email = :email COLLATE NOCASE")
     suspend fun updateUserByEmail(name: String, email: String, passwordHash: String, role: String): Int
     
+    // ✅ ACTUALIZAR RUT DESDE FIREBASE
+    @Query("UPDATE users SET rut = :rut WHERE email = :email COLLATE NOCASE")
+    suspend fun updateUserRut(email: String, rut: String): Int
+
     // FIX: Añadido COLLATE NOCASE para que el login no sea sensible a mayúsculas en el email
     @Query("SELECT * FROM users WHERE email = :email COLLATE NOCASE AND passwordHash = :password LIMIT 1")
     suspend fun login(email: String, password: String): User?

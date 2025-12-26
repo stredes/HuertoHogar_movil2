@@ -21,8 +21,8 @@ import org.json.JSONObject
 private const val TAG = "MarketVM"
 
 data class MarketUiState(
-    val productos: List<Producto> = emptyList(), 
-    val productosFiltrados: List<Producto> = emptyList(), 
+    val productos: List<Producto> = emptyList(),
+    val productosFiltrados: List<Producto> = emptyList(),
     val carrito: Map<String, Int> = emptyMap(),
     val totalCLP: Int = 0,
     val countCarrito: Int = 0,
@@ -41,7 +41,8 @@ class MarketViewModel @Inject constructor(
     private val userRepository: UserRepository,
     private val socialDao: SocialDao,
     private val sessionManager: SessionManager, // Inyectamos SessionManager para validar email actual
-    private val mensajeRepository: MensajeRepository
+    private val mensajeRepository: MensajeRepository,
+    private val socialRepository: SocialRepository // Inyectar SocialRepository
 ) : ViewModel() {
 
     private val _query = MutableStateFlow("")
@@ -52,23 +53,27 @@ class MarketViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     private val _carritoFlow = carritoDao.getCarrito()
     private val _adminsFlow = userRepository.getAllAdmins()
+    private val _amigosFlow = socialRepository.getAmigos() // Obtener flujo de amigos
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
 
     @OptIn(FlowPreview::class)
     val ui: StateFlow<MarketUiState> = combine(
         _productosFlow,
         _carritoFlow,
         _adminsFlow,
+        _amigosFlow, // Añadir flujo de amigos
         combine(_query.debounce(100), _selectedProvider, _seleccionadoId) { q, p, s -> Triple(q, p, s) }
-    ) { productos, itemsCarrito, admins, filters ->
+    ) { productos, itemsCarrito, admins, amigos, filters ->
         val (query, providerEmail, selId) = filters
-        
+
         val productMap = productos.associateBy { it.id }
 
         // B. Filtrado optimizado y corregido
-        val filteredList = filterProducts(productos, query, providerEmail)
+        val filteredList = filterProducts(productos, query, providerEmail, amigos)
 
         val carritoMap = itemsCarrito.associate { it.productoId to it.cantidad }
-        
+
         val total = itemsCarrito.sumOf { item ->
             val p = productMap[item.productoId]
             (p?.precioCLP ?: 0) * item.cantidad
@@ -99,22 +104,40 @@ class MarketViewModel @Inject constructor(
     }
 
     private fun filterProducts(
-        list: List<Producto>, 
-        query: String, 
-        provider: String?
+        list: List<Producto>,
+        query: String,
+        provider: String?,
+        amigos: List<User>
     ): List<Producto> {
         var result = list
-        
+        val amigoEmails = amigos.map { it.email }.toSet()
+
+        // Lógica de filtrado principal:
+        // 1. Si no hay amigos, el usuario es "nuevo" y no ve nada (excepto si busca algo específico).
+        // 2. Si hay amigos, solo ve productos de sus amigos proveedores.
+        if (amigos.isEmpty()) {
+            // Un usuario sin amigos no debería ver ningún producto por defecto.
+            // A menos que esté buscando algo específico (esto puede ser un feature deseado o no)
+            // Por ahora, para cumplir el requisito, devolvemos una lista vacía.
+            return emptyList()
+        } else {
+            // Filtrar para que solo se muestren productos de proveedores que son amigos.
+            result = result.filter { producto ->
+                amigoEmails.contains(producto.providerEmail)
+            }
+        }
+
+
         // FIX: Comparación case-insensitive para el filtro de proveedor
         if (!provider.isNullOrBlank()) {
-            result = result.filter { 
-                it.providerEmail?.equals(provider, ignoreCase = true) == true 
+            result = result.filter {
+                it.providerEmail?.equals(provider, ignoreCase = true) == true
             }
         }
 
         if (query.isNotBlank()) {
             val q = query.trim().lowercase()
-            result = result.filter { 
+            result = result.filter {
                 it.nombre.contains(q, ignoreCase = true)
             }
         }
@@ -122,7 +145,7 @@ class MarketViewModel @Inject constructor(
     }
 
     fun setQuery(q: String) { _query.value = q }
-    
+
     fun setProviderFilter(email: String?) { _selectedProvider.value = email }
 
     fun seleccionar(p: Producto?) { _seleccionadoId.value = p?.id }
@@ -136,7 +159,7 @@ class MarketViewModel @Inject constructor(
                  val primerProdId = itemsEnCarrito.first()
                  val primerProd = ui.value.productos.find { it.id == primerProdId }
                  val proveedorActual = primerProd?.providerEmail
-                 
+
                  // Si el proveedor del nuevo producto es diferente al que ya está en el carrito
                  if (!p.providerEmail.equals(proveedorActual, ignoreCase = true)) {
                      // Opción: Limpiar carrito anterior o rechazar.
@@ -160,17 +183,17 @@ class MarketViewModel @Inject constructor(
     }
 
     fun quitar(p: Producto) = agregar(p, -1)
-    
+
     fun limpiarCarrito() { viewModelScope.launch { carritoDao.clearCarrito() } }
 
     fun crearProducto(nombre: String, precio: Int, unidad: String, desc: String, uri: String?, creatorEmail: String?) {
         viewModelScope.launch(Dispatchers.IO) {
             // FIX: Obtención robusta del email del proveedor
             val currentEmail = creatorEmail
-                ?: p2pManager.currentUserEmail 
-                ?: userRepository.getAllUsersSync().firstOrNull { it.role == "admin" || it.role == "provider" }?.email 
+                ?: p2pManager.currentUserEmail
+                ?: userRepository.getAllUsersSync().firstOrNull { it.role == "admin" || it.role == "provider" }?.email
                 ?: "admin@huertohogar.com"
-                
+
             // Subida de imagen
             val finalUri = resolveAndUploadImage(uri)
 
@@ -184,7 +207,7 @@ class MarketViewModel @Inject constructor(
                 imagenUri = finalUri,
                 providerEmail = currentEmail
             )
-            
+
             // 1. Guardar localmente siempre
             repo.agregarProducto(nuevo)
 
@@ -198,17 +221,17 @@ class MarketViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             // VALIDACIÓN: Verificar si el usuario actual es el dueño del producto
             val currentUserEmail = sessionManager.getUserEmail()
-            
+
             // Permitimos editar si:
             // 1. Es el dueño del producto (providerEmail coincide)
             // 2. O es el usuario "root"
             // 3. O el producto no tiene dueño asignado (caso borde)
-            
+
             // Nota: Podríamos consultar el rol del usuario actual si es necesario ser más estrictos,
             // pero por ahora validamos principalmente la propiedad del producto.
             val isOwner = originalProviderEmail.equals(currentUserEmail, ignoreCase = true)
             val isRoot = currentUserEmail == "root" // Usuario root siempre puede
-            
+
             if (!isOwner && !isRoot && originalProviderEmail != null) {
                 Log.w(TAG, "❌ Intento no autorizado de editar producto. Usuario: $currentUserEmail, Dueño: $originalProviderEmail")
                 return@launch // Salimos sin hacer cambios
@@ -226,7 +249,7 @@ class MarketViewModel @Inject constructor(
                 imagenUri = finalUri,
                 providerEmail = originalProviderEmail
             )
-            
+
             repo.actualizarProducto(actualizado)
 
             // FIX: Sincronizar SIEMPRE
@@ -234,17 +257,17 @@ class MarketViewModel @Inject constructor(
             launch { notificarUpsertProducto(actualizado) }
         }
     }
-    
+
     private suspend fun resolveAndUploadImage(uri: String?): String? {
         if (uri.isNullOrBlank()) return null
         if (uri.startsWith("http")) return uri
-        
+
         val uriObj = if (uri.startsWith("/")) Uri.fromFile(File(uri)) else Uri.parse(uri)
-        
+
         // REINTENTOS MÁS AGRESIVOS Y ROBUSTOS
         var attempt = 0
         val maxAttempts = 3 // Intentamos 3 veces
-        
+
         while (attempt < maxAttempts) {
             try {
                 // Verificar conectividad básica (simulado por el éxito de la función)
@@ -258,14 +281,14 @@ class MarketViewModel @Inject constructor(
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Excepción subiendo imagen (intento ${attempt + 1}): ${e.message}")
             }
-            
+
             attempt++
             if (attempt < maxAttempts) {
                 // Backoff exponencial simple: 1s, 2s...
                 delay(1000L * attempt)
             }
         }
-        
+
         Log.e(TAG, "❌ FALLA CRÍTICA: No se pudo subir imagen tras $maxAttempts intentos. Se retornará null para evitar rutas locales rotas en la nube.")
         return null
     }
@@ -281,7 +304,7 @@ class MarketViewModel @Inject constructor(
                  Log.w(TAG, "❌ Intento no autorizado de eliminar producto. Usuario: $currentUserEmail, Dueño: ${producto.providerEmail}")
                  return@launch
             }
-            
+
             carritoDao.deleteItem(producto.id)
             repo.eliminarProducto(producto)
             launch { firebaseRepository.deleteProduct(producto.id, producto.providerEmail) }
@@ -292,9 +315,9 @@ class MarketViewModel @Inject constructor(
     private suspend fun notificarUpsertProducto(producto: Producto) {
         val peers = p2pManager.connectedPeers.value
         if (peers.isEmpty()) return
-        
+
         val senderEmail = p2pManager.currentUserEmail ?: "admin"
-        
+
         val productJson = JSONObject().apply {
             put("id", producto.id)
             put("nombre", producto.nombre)
@@ -305,14 +328,14 @@ class MarketViewModel @Inject constructor(
             put("imagenUri", producto.imagenUri)
             put("providerEmail", producto.providerEmail)
         }
-        
+
         val payload = JSONObject().apply {
             put("type", "UPSERT_PRODUCT")
             put("senderEmail", senderEmail)
             put("senderName", "Admin")
             put("product", productJson)
         }
-        
+
         peers.forEach { peerEmail ->
             payload.put("receiverEmail", peerEmail)
             p2pManager.sendMessageJsonDirect(peerEmail, payload)
@@ -322,7 +345,7 @@ class MarketViewModel @Inject constructor(
     private suspend fun notificarDeleteProducto(productId: String) {
         val peers = p2pManager.connectedPeers.value
         if (peers.isEmpty()) return
-        
+
         val senderEmail = p2pManager.currentUserEmail ?: "admin"
         val payload = JSONObject().apply {
              put("type", "DELETE_PRODUCT")
@@ -338,21 +361,21 @@ class MarketViewModel @Inject constructor(
 
     fun enviarContacto(nombreRemitente: String, emailDestino: String, mensaje: String) {
         val emailRemitente = p2pManager.currentUserEmail ?: return
-        
+
         viewModelScope.launch(Dispatchers.IO) {
             val remitente = userRepository.getUser(emailRemitente) ?: return@launch
-            
+
             val destinatario = userRepository.getUser(emailDestino) ?: run {
                 val placeholder = User(
-                    name = "Vendedor ($emailDestino)", 
-                    email = emailDestino, 
-                    passwordHash = "placeholder", 
+                    name = "Vendedor ($emailDestino)",
+                    email = emailDestino,
+                    passwordHash = "placeholder",
                     role = "provider"
                 )
                 userRepository.createUser(placeholder)
                 userRepository.getUser(emailDestino)!!
             }
-            
+
             val nuevoMensaje = MensajeChat(
                 remitenteId = remitente.id,
                 destinatarioId = destinatario.id,
@@ -361,18 +384,18 @@ class MarketViewModel @Inject constructor(
             )
 
             val msgId = socialDao.insertMensaje(nuevoMensaje)
-            
+
             var enviado = p2pManager.sendMessage(
                 senderName = remitente.name,
                 senderEmail = remitente.email,
                 receiverEmail = destinatario.email,
                 content = mensaje
             )
-            
+
             if (!enviado) {
                  enviado = firebaseRepository.sendMessage(remitente, destinatario.email, mensaje)
             }
-            
+
             socialDao.updateEstado(msgId, if (enviado) EstadoMensaje.ENVIADO else EstadoMensaje.ERROR)
         }
     }
@@ -387,7 +410,7 @@ class MarketViewModel @Inject constructor(
             val sb = StringBuilder()
             sb.append("Nueva compra realizada por: $currentUserEmail\n\n")
             sb.append("Detalle:\n")
-            
+
             carrito.forEach { (id, qty) ->
                 val p = productos.find { it.id == id }
                 if (p != null) {

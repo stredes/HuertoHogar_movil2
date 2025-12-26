@@ -95,6 +95,12 @@ class SocialViewModel @Inject constructor(
         }
     }
 
+    fun eliminarAmigo(amigo: User) {
+        viewModelScope.launch {
+            repository.eliminarAmigo(amigo)
+        }
+    }
+
     // --- NUEVO MANEJO DE CHAT ACTIVO ---
     
     /**
