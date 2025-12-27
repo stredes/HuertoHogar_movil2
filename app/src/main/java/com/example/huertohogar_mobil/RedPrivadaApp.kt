@@ -9,10 +9,10 @@ import android.os.Debug
 import android.util.Log
 import dagger.hilt.android.HiltAndroidApp
 
-private const val TAG = "HuertoHogarApp"
+private const val TAG = "RedPrivadaApp"
 
 @HiltAndroidApp
-class HuertoHogarApp : Application() {
+class RedPrivadaApp : Application() {
 
     override fun onCreate() {
         // Chequeo anti-depuración
@@ -23,7 +23,7 @@ class HuertoHogarApp : Application() {
         super.onCreate()
 
         Log.d(TAG, "════════════════════════════════════════════════════════════")
-        Log.d(TAG, "🚀 INICIANDO HUERTOHOGAR")
+        Log.d(TAG, "🚀 INICIANDO RED PRIVADA")
         Log.d(TAG, "════════════════════════════════════════════════════════════")
         Log.d(TAG, "Sincronización bidireccional: LISTA")
         Log.d(TAG, "Firebase persistence: HABILITADA")
@@ -35,10 +35,10 @@ class HuertoHogarApp : Application() {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val name = "Huerto Hogar Alertas"
+            val name = "Red Privada Alertas"
             val descriptionText = "Canal para notificaciones administrativas"
             val importance = NotificationManager.IMPORTANCE_DEFAULT
-            val channel = NotificationChannel("HUERTO_CHANNEL_ID", name, importance).apply {
+            val channel = NotificationChannel("REDPRIVADA_CHANNEL_ID", name, importance).apply {
                 description = descriptionText
             }
             // Registrar el canal en el sistema

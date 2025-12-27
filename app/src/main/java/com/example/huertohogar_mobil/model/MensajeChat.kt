@@ -29,7 +29,11 @@ object TipoContenido {
         ForeignKey(entity = User::class, parentColumns = ["id"], childColumns = ["remitenteId"], onDelete = ForeignKey.CASCADE),
         ForeignKey(entity = User::class, parentColumns = ["id"], childColumns = ["destinatarioId"], onDelete = ForeignKey.CASCADE)
     ],
-    indices = [Index(value = ["remitenteId", "destinatarioId", "timestamp", "contenido"], unique = true)]
+    indices = [
+        Index(value = ["remitenteId"]),
+        Index(value = ["destinatarioId"]),
+        Index(value = ["remitenteId", "destinatarioId", "timestamp", "contenido"], unique = true)
+    ]
 )
 data class MensajeChat(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

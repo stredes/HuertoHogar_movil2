@@ -2,7 +2,7 @@ package com.example.huertohogar_mobil.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Paleta Natural - HuertoHogar
+// Paleta Natural - Red Privada
 
 // Verdes (Primary)
 val GreenPrimary = Color(0xFF2E7D32) // Verde bosque profundo

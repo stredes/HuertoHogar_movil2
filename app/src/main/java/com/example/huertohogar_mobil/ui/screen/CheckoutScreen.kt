@@ -14,6 +14,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.huertohogar_mobil.model.Producto
 import com.example.huertohogar_mobil.ui.components.HuertoButton
 import com.example.huertohogar_mobil.ui.components.HuertoTopBar
+import com.example.huertohogar_mobil.utils.ResponsiveUtils
 import com.example.huertohogar_mobil.viewmodel.MarketUiState
 import com.example.huertohogar_mobil.viewmodel.PedidoViewModel
 
@@ -38,6 +39,11 @@ fun CheckoutScreen(
         primerProducto?.providerEmail ?: "admin@huertohogar.com"
     }
 
+    // Valores responsivos
+    val horizontalPadding = ResponsiveUtils.getHorizontalPadding()
+    val verticalSpacing = ResponsiveUtils.getElementSpacing()
+    val maxWidth = ResponsiveUtils.getMaxWidth()
+
     Scaffold(
         topBar = {
             HuertoTopBar(
@@ -52,11 +58,17 @@ fun CheckoutScreen(
                 .padding(pv)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(horizontal = horizontalPadding, vertical = verticalSpacing)
+                .let { mod -> if (maxWidth != null) mod.widthIn(max = maxWidth) else mod },
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(verticalSpacing)
         ) {
             // Resumen de productos
-            Text("Resumen de compra", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(
+                "Resumen de compra",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 elevation = CardDefaults.cardElevation(2.dp)
@@ -67,9 +79,10 @@ fun CheckoutScreen(
                         if (p != null) {
                             Row(
                                 Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("$qty x ${p.nombre}")
+                                Text("$qty x ${p.nombre}", modifier = Modifier.weight(1f))
                                 Text(formatoCLP(p.precioCLP * qty))
                             }
                         }
@@ -77,16 +90,25 @@ fun CheckoutScreen(
                     HorizontalDivider()
                     Row(
                         Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Total:", fontWeight = FontWeight.Bold)
-                        Text(formatoCLP(ui.totalCLP), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Text("Total:", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        Text(
+                            formatoCLP(ui.totalCLP),
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
             }
 
             // Dirección de entrega
-            Text("Dirección de entrega", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                "Dirección de entrega",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
             OutlinedTextField(
                 value = direccion,
                 onValueChange = { direccion = it },
@@ -97,7 +119,11 @@ fun CheckoutScreen(
             )
 
             // Método de pago
-            Text("Método de pago", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                "Método de pago",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 elevation = CardDefaults.cardElevation(2.dp)
@@ -136,7 +162,7 @@ fun CheckoutScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(verticalSpacing))
 
             // Botón de finalizar
             HuertoButton(

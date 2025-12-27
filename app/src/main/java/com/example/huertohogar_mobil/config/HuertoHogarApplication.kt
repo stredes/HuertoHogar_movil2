@@ -3,7 +3,7 @@ package com.example.huertohogar_mobil.config
 import android.app.Application
 import android.util.Log
 
-private const val TAG = "HuertoHogarApp"
+private const val TAG = "RedPrivadaApp"
 
 /**
  * NOTA: Esta clase ya no se usa.
@@ -18,7 +18,7 @@ class HuertoHogarApplication : Application() {
         super.onCreate()
 
         Log.d(TAG, "════════════════════════════════════════════════════════════")
-        Log.d(TAG, "🚀 INICIANDO HUERTOHOGAR")
+        Log.d(TAG, "🚀 INICIANDO RED PRIVADA")
         Log.d(TAG, "════════════════════════════════════════════════════════════")
         Log.d(TAG, "Sincronización bidireccional: LISTA")
         Log.d(TAG, "Firebase persistence: HABILITADA")

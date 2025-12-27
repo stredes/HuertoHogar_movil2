@@ -44,7 +44,7 @@ import androidx.navigation.navArgument
 import com.example.huertohogar_mobil.navigation.Routes
 import com.example.huertohogar_mobil.service.P2pService
 import com.example.huertohogar_mobil.ui.screen.*
-import com.example.huertohogar_mobil.ui.theme.HuertoHogarMobilTheme
+import com.example.huertohogar_mobil.ui.theme.RedPrivadaMobilTheme
 import com.example.huertohogar_mobil.viewmodel.AuthViewModel
 import com.example.huertohogar_mobil.viewmodel.MarketViewModel
 import com.example.huertohogar_mobil.viewmodel.SocialViewModel
@@ -82,7 +82,7 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            HuertoHogarMobilTheme {
+            RedPrivadaMobilTheme {
                 navController = rememberNavController()
                 val ui = vm.ui.collectAsStateWithLifecycle().value
                 val authState by authVm.uiState.collectAsStateWithLifecycle()
@@ -201,6 +201,7 @@ class MainActivity : ComponentActivity() {
                                 ui = ui,
                                 onSumar = vm::agregar,
                                 onRestar = vm::quitar,
+                                onEliminar = vm::eliminarDelCarrito,
                                 onBack = { navController.popBackStack() },
                                 onCheckout = { navController.navigate(Routes.Checkout.route) },
                                 onCompartir = { navController.navigate(Routes.CompartirCarrito.route) } // Agregado si existe
@@ -473,11 +474,18 @@ class MainActivity : ComponentActivity() {
                         // ---------- FLUJO DE PAGO ----------
 
                         composable(Routes.FinPago.route) {
-                            FinPagoScreen {
-                                navController.navigate(Routes.Inicio.route) {
-                                    popUpTo(Routes.Inicio.route) { inclusive = true }
+                            FinPagoScreen(
+                                onVolverAlInicio = {
+                                    navController.navigate(Routes.Inicio.route) {
+                                        popUpTo(Routes.Inicio.route) { inclusive = true }
+                                    }
+                                },
+                                onVerPedidos = {
+                                    navController.navigate(Routes.MisPedidos.route) {
+                                        popUpTo(Routes.Inicio.route) { inclusive = false }
+                                    }
                                 }
-                            }
+                            )
                         }
 
                     }

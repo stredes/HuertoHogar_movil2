@@ -10,6 +10,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.example.huertohogar_mobil.utils.ResponsiveUtils
 
 @Composable
 fun HuertoButton(
@@ -20,10 +21,13 @@ fun HuertoButton(
     fullWidth: Boolean = true,
     icon: @Composable (() -> Unit)? = null
 ) {
+    // Altura responsiva según tamaño de pantalla
+    val buttonHeight = ResponsiveUtils.getButtonHeight()
+
     val finalModifier = if (fullWidth) {
-        modifier.fillMaxWidth().height(50.dp)
+        modifier.fillMaxWidth().height(buttonHeight)
     } else {
-        modifier.height(50.dp)
+        modifier.height(buttonHeight)
     }
 
     Button(

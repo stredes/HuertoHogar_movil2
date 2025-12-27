@@ -24,6 +24,20 @@ object DatabaseModule {
         }
     }
 
+    // Migración de versión 16 a 17: Agregar índices a tablas Amistad y MensajeChat
+    private val MIGRATION_16_17 = object : Migration(16, 17) {
+        override fun migrate(database: SupportSQLiteDatabase) {
+            // Agregar índices a tabla amistades
+            database.execSQL("CREATE INDEX IF NOT EXISTS index_amistades_usuarioId ON amistades(usuarioId)")
+            database.execSQL("CREATE INDEX IF NOT EXISTS index_amistades_amigoId ON amistades(amigoId)")
+
+            // Agregar índices a tabla mensajes_chat
+            database.execSQL("CREATE INDEX IF NOT EXISTS index_mensajes_chat_remitenteId ON mensajes_chat(remitenteId)")
+            database.execSQL("CREATE INDEX IF NOT EXISTS index_mensajes_chat_destinatarioId ON mensajes_chat(destinatarioId)")
+            database.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_mensajes_chat_remitenteId_destinatarioId_timestamp_contenido ON mensajes_chat(remitenteId, destinatarioId, timestamp, contenido)")
+        }
+    }
+
     @Provides
     @Singleton
     fun provideAppDatabase(@ApplicationContext context: Context): AppDatabase {
@@ -32,8 +46,8 @@ object DatabaseModule {
             AppDatabase::class.java,
             "huertohogar_db"
         )
-        // Agregar la migración para no perder datos
-        .addMigrations(MIGRATION_15_16)
+        // Agregar las migraciones para no perder datos
+        .addMigrations(MIGRATION_15_16, MIGRATION_16_17)
         // Permite la reconstrucción destructiva de la DB al cambiar la versión.
         // Esto es necesario para aplicar el índice único en MensajeChat
         // y solucionar el problema de duplicación de una vez por todas.

@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -20,7 +21,10 @@ import androidx.compose.ui.unit.dp
 import com.example.huertohogar_mobil.ui.components.HuertoButton
 
 @Composable
-fun FinPagoScreen(onVolverAlInicio: () -> Unit) {
+fun FinPagoScreen(
+    onVolverAlInicio: () -> Unit,
+    onVerPedidos: (() -> Unit)? = null
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -46,8 +50,21 @@ fun FinPagoScreen(onVolverAlInicio: () -> Unit) {
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center
         )
-        Spacer(modifier = Modifier.height(32.dp))
-        
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Botón clickeable para ver pedidos
+        if (onVerPedidos != null) {
+            TextButton(onClick = onVerPedidos) {
+                Text(
+                    text = "Ver el estado de tus pedidos",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
         HuertoButton(
             text = "Volver al Inicio",
             onClick = onVolverAlInicio

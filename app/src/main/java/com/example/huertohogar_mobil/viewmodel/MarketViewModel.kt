@@ -184,6 +184,12 @@ class MarketViewModel @Inject constructor(
 
     fun quitar(p: Producto) = agregar(p, -1)
 
+    fun eliminarDelCarrito(p: Producto) {
+        viewModelScope.launch {
+            carritoDao.deleteItem(p.id)
+        }
+    }
+
     fun limpiarCarrito() { viewModelScope.launch { carritoDao.clearCarrito() } }
 
     fun crearProducto(nombre: String, precio: Int, unidad: String, desc: String, uri: String?, creatorEmail: String?) {

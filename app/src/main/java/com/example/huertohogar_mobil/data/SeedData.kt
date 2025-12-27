@@ -3,8 +3,24 @@ package com.example.huertohogar_mobil.data
 import com.example.huertohogar_mobil.R
 import com.example.huertohogar_mobil.model.Producto
 
+/**
+ * Datos semilla para la aplicación
+ *
+ * IMPORTANTE: Correos ficticios de administradores
+ * Los correos con patrón admin@*.com (excepto dominios reales como gmail.com)
+ * están reservados para administradores de prueba:
+ * - admin@huertohogar.com (Admin principal)
+ * - admin@huevosonline.com (Admin ejemplo)
+ * - admin@verdurasfrescas.com (Admin ejemplo)
+ * etc.
+ *
+ * Los usuarios reales deben usar correos estándar como:
+ * - gianlucassanmartin@gmail.com
+ * - usuario@hotmail.com
+ * etc.
+ */
 object SeedData {
-    // Definimos el email del admin principal para que los productos semilla le pertenezcan
+    // Email del admin principal para productos semilla
     private const val ADMIN_EMAIL = "admin@huertohogar.com"
 
     val productos = listOf(

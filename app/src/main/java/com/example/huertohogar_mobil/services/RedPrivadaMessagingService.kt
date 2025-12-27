@@ -17,11 +17,11 @@ import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import java.util.UUID
 
-class HuertoHogarMessagingService : FirebaseMessagingService() {
+class RedPrivadaMessagingService : FirebaseMessagingService() {
 
     companion object {
-        private const val TAG = "HuertoHogarFCM"
-        private const val MSG_CHANNEL_ID = "HUERTO_MESSAGES_CHANNEL"
+        private const val TAG = "RedPrivadaFCM"
+        private const val MSG_CHANNEL_ID = "REDPRIVADA_MESSAGES_CHANNEL"
         private const val PREFS_FILE = "fcm_processed_notifications"
     }
 
@@ -167,7 +167,7 @@ class HuertoHogarMessagingService : FirebaseMessagingService() {
             val name = "Mensajes y Alertas"
             val importance = NotificationManager.IMPORTANCE_HIGH
             val channel = NotificationChannel(MSG_CHANNEL_ID, name, importance).apply {
-                description = "Notificaciones del Huerto"
+                description = "Notificaciones de Red Privada"
                 enableVibration(true)
             }
 

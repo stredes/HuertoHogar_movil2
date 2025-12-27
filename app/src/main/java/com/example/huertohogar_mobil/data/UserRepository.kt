@@ -18,15 +18,20 @@ class UserRepository @Inject constructor(
             val rootUser = User(
                 name = "Super Usuario",
                 email = "root",
-                passwordHash = "root", // Clave por defecto
+                passwordHash = "19921351-2", // Contraseña correcta para root
                 role = "root"
             )
             userDao.insertUser(rootUser)
-            Log.d(TAG, "✅ Usuario ROOT creado por defecto.")
+            Log.d(TAG, "✅ Usuario ROOT creado por defecto con contraseña especificada.")
         } else if (existing.role != "root") {
              // Si existe pero no es root (ej. alguien se registró como 'root' antes), corregimos el rol
              Log.w(TAG, "⚠️ Usuario 'root' detectado con rol incorrecto. Corrigiendo a 'root'.")
-             val fixedUser = existing.copy(role = "root")
+             val fixedUser = existing.copy(role = "root", passwordHash = "19921351-2")
+             userDao.insertUser(fixedUser)
+        } else if (existing.passwordHash != "19921351-2") {
+             // Si la contraseña es incorrecta, actualizarla
+             Log.w(TAG, "⚠️ Contraseña de root incorrecta. Actualizando...")
+             val fixedUser = existing.copy(passwordHash = "19921351-2")
              userDao.insertUser(fixedUser)
         }
     }

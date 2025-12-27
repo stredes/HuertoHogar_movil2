@@ -64,8 +64,8 @@ class P2pService : Service() {
 
     private fun startForegroundServiceNotification() {
         val channelId = "P2P_SERVICE_CHANNEL"
-        val channelName = "Huerto P2P Background Service"
-        
+        val channelName = "Red Privada P2P Background Service"
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(channelId, channelName, NotificationManager.IMPORTANCE_LOW).apply {
                 description = "Mantiene la conexión P2P activa"
@@ -76,7 +76,7 @@ class P2pService : Service() {
         }
 
         val notificationBuilder = NotificationCompat.Builder(this, channelId)
-            .setContentTitle("Huerto Hogar Conectado")
+            .setContentTitle("Red Privada Conectada")
             .setContentText("Servicio de chat P2P y Online activo")
             .setSmallIcon(R.drawable.icono)
             .setPriority(NotificationCompat.PRIORITY_LOW)

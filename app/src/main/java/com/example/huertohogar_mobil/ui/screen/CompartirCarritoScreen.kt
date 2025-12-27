@@ -98,8 +98,8 @@ fun AmigoShareItem(user: User, onShare: () -> Unit) {
 
 fun generarTextoLista(ui: MarketUiState): String {
     val sb = StringBuilder()
-    sb.append("🛒 **Mi Lista de Compras HuertoHogar** 🛒\n\n")
-    
+    sb.append("🛒 **Mi Lista de Compras Red Privada** 🛒\n\n")
+
     val items = ui.carrito.mapNotNull { (id, qty) ->
         ui.productos.firstOrNull { it.id == id }?.let { it to qty }
     }

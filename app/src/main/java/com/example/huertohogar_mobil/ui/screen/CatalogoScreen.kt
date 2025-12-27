@@ -87,7 +87,7 @@ fun CatalogoScreen(
                     // Opción para ver productos sin proveedor (o admin general) si existen
                     item {
                         ProviderCard(
-                            name = "HuertoHogar General",
+                            name = "Red Privada General",
                             email = "Todos los demás",
                             onClick = { 
                                 // Usamos un filtro especial o null con flag si quisiéramos "otros"

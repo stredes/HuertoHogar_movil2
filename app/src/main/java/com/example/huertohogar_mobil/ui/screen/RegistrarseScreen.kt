@@ -25,6 +25,7 @@ import com.example.huertohogar_mobil.ui.components.HuertoTextField
 import com.example.huertohogar_mobil.ui.components.RutTextField
 import com.example.huertohogar_mobil.ui.components.SectionHeader
 import com.example.huertohogar_mobil.utils.RutValidator
+import com.example.huertohogar_mobil.utils.EmailValidator
 import com.example.huertohogar_mobil.viewmodel.AuthViewModel
 
 @Composable
@@ -37,6 +38,7 @@ fun RegistrarseScreen(
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var rutError by remember { mutableStateOf<String?>(null) }
+    var emailError by remember { mutableStateOf<String?>(null) }
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -77,9 +79,21 @@ fun RegistrarseScreen(
 
         HuertoTextField(
             value = email,
-            onValueChange = { email = it },
-            label = "Email"
+            onValueChange = {
+                email = it
+                emailError = null
+            },
+            label = "Email",
+            isError = emailError != null
         )
+        if (emailError != null) {
+            Text(
+                text = emailError!!,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(start = 16.dp, top = 4.dp)
+            )
+        }
         Spacer(modifier = Modifier.height(8.dp))
         HuertoTextField(
             value = password,
@@ -101,10 +115,17 @@ fun RegistrarseScreen(
         if (uiState.isLoading) {
             HuertoLoader()
         } else {
-            HuertoButton(
+                HuertoButton(
                 text = "Registrarse",
                 onClick = {
                     rutError = null
+                    emailError = null
+
+                    // Validar formato de email (permite cualquier email válido)
+                    if (!EmailValidator.esFormatoValido(email)) {
+                        emailError = "Por favor ingresa un email válido (ej: usuario@ejemplo.com)"
+                        return@HuertoButton
+                    }
 
                     // Validar RUT
                     if (rut.isEmpty()) {

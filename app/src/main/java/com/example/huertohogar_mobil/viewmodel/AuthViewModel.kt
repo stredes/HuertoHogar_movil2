@@ -143,4 +143,8 @@ class AuthViewModel @Inject constructor(
     fun clearError() {
          _uiState.update { it.copy(error = null) }
     }
+
+    fun setError(message: String) {
+        _uiState.update { it.copy(error = message) }
+    }
 }

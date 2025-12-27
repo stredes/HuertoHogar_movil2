@@ -10,7 +10,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -19,6 +18,8 @@ import com.example.huertohogar_mobil.ui.components.HuertoButton
 import com.example.huertohogar_mobil.ui.components.HuertoLoader
 import com.example.huertohogar_mobil.ui.components.HuertoTextField
 import com.example.huertohogar_mobil.ui.components.HuertoTextButton
+import com.example.huertohogar_mobil.utils.EmailValidator
+import com.example.huertohogar_mobil.utils.ResponsiveUtils
 import com.example.huertohogar_mobil.viewmodel.AuthViewModel
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.WindowInsets
@@ -37,6 +38,7 @@ fun IniciarSesionScreen(
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var showForgotPasswordDialog by remember { mutableStateOf(false) }
+    var validationError by remember { mutableStateOf<String?>(null) }
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -45,7 +47,7 @@ fun IniciarSesionScreen(
         val user = uiState.user ?: return@LaunchedEffect
 
         // Asumimos que tu modelo User tiene la propiedad "role"
-        val role = user.role?.lowercase(Locale.ROOT) ?: ""
+        val role = user.role.lowercase(Locale.ROOT)
 
         when (role) {
             "root" -> onLoginRoot()
@@ -63,8 +65,8 @@ fun IniciarSesionScreen(
 
     // Scroll para que se pueda ver todo en pantallas pequeñas / con teclado abierto
     val scrollState = rememberScrollState()
-    val configuration = LocalConfiguration.current
-    val screenWidthDp = configuration.screenWidthDp.dp // (lo puedes borrar si no lo usas)
+    val horizontalPadding = ResponsiveUtils.getHorizontalPadding()
+    val maxWidth = ResponsiveUtils.getMaxWidth()
 
     Box(
         modifier = Modifier
@@ -77,23 +79,22 @@ fun IniciarSesionScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                // Limitamos el ancho máximo para que en tablets no quede gigante
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = horizontalPadding)
                 .verticalScroll(scrollState),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
 
-            // Contenedor central con ancho máximo razonable
+            // Contenedor central con ancho máximo responsivo
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .widthIn(max = 500.dp), // Máximo ancho para tablets
+                    .let { mod -> if (maxWidth != null) mod.widthIn(max = maxWidth) else mod },
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
 
                 Text(
-                    text = "Huerto Hogar",
+                    text = "Red Privada",
                     style = MaterialTheme.typography.displaySmall,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -124,10 +125,20 @@ fun IniciarSesionScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
+                if (validationError != null) {
+                    Text(
+                        text = validationError!!,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
                 if (uiState.error != null) {
                     Text(
                         text = uiState.error!!,
-                        color = MaterialTheme.colorScheme.error
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                 }
@@ -138,8 +149,30 @@ fun IniciarSesionScreen(
                 } else {
                     // Botón ocupa ancho, no alto completo
                     HuertoButton(
-                        text = "Ingresar",
-                        onClick = { viewModel.login(email, password) },
+                        text = "Iniciar Sesión",
+                        onClick = {
+                            // Limpiar errores previos
+                            validationError = null
+
+                            // Validar email
+                            if (email.isBlank()) {
+                                validationError = "Por favor ingresa un email"
+                                return@HuertoButton
+                            }
+
+                            // Permitir tanto "root" como emails normales
+                            if (!EmailValidator.esFormatoValido(email) && !EmailValidator.esRoot(email)) {
+                                validationError = "Por favor ingresa un email válido"
+                                return@HuertoButton
+                            }
+
+                            if (password.isBlank()) {
+                                validationError = "Por favor ingresa una contraseña"
+                                return@HuertoButton
+                            }
+
+                            viewModel.login(email, password)
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 8.dp)

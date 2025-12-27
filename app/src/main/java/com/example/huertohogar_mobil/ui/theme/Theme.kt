@@ -5,6 +5,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 
 private val LightColors = lightColorScheme(
@@ -44,7 +45,7 @@ private val DarkColors = darkColorScheme(
 )
 
 @Composable
-fun HuertoHogarMobilTheme(
+fun RedPrivadaMobilTheme(
     useDarkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
@@ -54,9 +55,13 @@ fun HuertoHogarMobilTheme(
         LightColors
     }
 
-    MaterialTheme(
-        colorScheme = colors,
-        typography = Typography, // Aseguramos que use nuestra tipografía
-        content = content
-    )
+    val windowSizeClass = rememberWindowSizeClass()
+
+    CompositionLocalProvider(LocalWindowSizeClass provides windowSizeClass) {
+        MaterialTheme(
+            colorScheme = colors,
+            typography = Typography, // Aseguramos que use nuestra tipografía
+            content = content
+        )
+    }
 }

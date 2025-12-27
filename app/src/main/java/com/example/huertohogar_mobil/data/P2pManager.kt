@@ -554,7 +554,7 @@ class P2pManager @Inject constructor(
                 }
                 override fun onServiceLost(service: NsdServiceInfo) {
                      val cleanName = service.serviceName.replace(Regex("\\s*\\(\\d+\\)$"), "")
-                     val email = cleanName.replace("Huerto-", "").replace("-at-", "@").replace("-dot-", ".")
+                     val email = cleanName.replace("RedPrivada-", "").replace("-at-", "@").replace("-dot-", ".")
                      discoveredUsers.remove(email)
                      discoveredServicesPorts.remove(email)
                      updateConnectedPeers()
@@ -586,7 +586,7 @@ class P2pManager @Inject constructor(
                     }
                     if (email == null) {
                         val cleanName = serviceInfo.serviceName.replace(Regex("\\s*\\(\\d+\\)$"), "")
-                        email = cleanName.replace("Huerto-", "").replace("-at-", "@").replace("-dot-", ".")
+                        email = cleanName.replace("RedPrivada-", "").replace("-at-", "@").replace("-dot-", ".")
                     }
                     if (email != null) {
                         serviceInfo.host?.let { 

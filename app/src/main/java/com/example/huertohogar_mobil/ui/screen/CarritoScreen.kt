@@ -18,6 +18,7 @@ import com.example.huertohogar_mobil.ui.components.CartItemRow
 import com.example.huertohogar_mobil.ui.components.HuertoButton
 import com.example.huertohogar_mobil.ui.components.HuertoIconButton
 import com.example.huertohogar_mobil.ui.components.HuertoTopBar
+import com.example.huertohogar_mobil.utils.ResponsiveUtils
 import com.example.huertohogar_mobil.viewmodel.MarketUiState
 
 @Composable
@@ -25,10 +26,15 @@ fun CarritoScreen(
     ui: MarketUiState,
     onSumar: (Producto) -> Unit,
     onRestar: (Producto) -> Unit,
+    onEliminar: (Producto) -> Unit,
     onBack: () -> Unit,
     onCheckout: () -> Unit,
     onCompartir: (() -> Unit)? = null
 ) {
+    // Valores responsivos
+    val horizontalPadding = ResponsiveUtils.getHorizontalPadding()
+    val elementSpacing = ResponsiveUtils.getElementSpacing()
+
     Scaffold(
         topBar = {
             HuertoTopBar(
@@ -52,20 +58,25 @@ fun CarritoScreen(
             if (ui.carrito.isNotEmpty()) {
                 BottomAppBar {
                     Row(
-                        Modifier.fillMaxWidth().padding(12.dp),
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = horizontalPadding, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("Total: ${formatoCLP(ui.totalCLP)}", fontWeight = FontWeight.Bold)
-                        
-                        // Using HuertoButton instead of raw Button
-                        Box(modifier = Modifier.width(150.dp)) {
-                            HuertoButton(
-                                text = "Continuar",
-                                onClick = onCheckout,
-                                icon = { Icon(Icons.Filled.Add, contentDescription = null) }
-                            )
-                        }
+                        Text(
+                            "Total: ${formatoCLP(ui.totalCLP)}",
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        // Botón responsivo que se adapta al ancho disponible
+                        HuertoButton(
+                            text = "Continuar",
+                            onClick = onCheckout,
+                            icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                            modifier = Modifier.widthIn(max = 180.dp)
+                        )
                     }
                 }
             }
@@ -84,15 +95,20 @@ fun CarritoScreen(
             }
 
             LazyColumn(
-                Modifier.padding(pv).fillMaxSize().padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                Modifier
+                    .padding(pv)
+                    .fillMaxSize()
+                    .padding(horizontal = horizontalPadding, vertical = elementSpacing),
+                verticalArrangement = Arrangement.spacedBy(elementSpacing),
+                contentPadding = PaddingValues(bottom = 16.dp)
             ) {
                 items(lineas, key = { it.first.id }) { (p, qty) ->
                     CartItemRow(
                         producto = p,
                         cantidad = qty,
                         onSumar = { onSumar(p) },
-                        onRestar = { onRestar(p) }
+                        onRestar = { onRestar(p) },
+                        onEliminar = { onEliminar(p) }
                     )
                 }
             }
