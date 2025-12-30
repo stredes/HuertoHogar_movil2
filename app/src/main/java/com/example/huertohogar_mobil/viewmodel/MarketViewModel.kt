@@ -5,6 +5,8 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.huertohogar_mobil.data.*
+import com.example.huertohogar_mobil.data.remote.RemoteCartRepository
+import com.example.huertohogar_mobil.data.remote.RemoteContactRepository
 import com.example.huertohogar_mobil.model.*
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -12,11 +14,13 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
 import javax.inject.Inject
 import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 private const val TAG = "MarketVM"
 
@@ -35,13 +39,11 @@ data class MarketUiState(
 @HiltViewModel
 class MarketViewModel @Inject constructor(
     private val repo: ProductoRepository,
-    private val carritoDao: CarritoDao,
+    private val cartRepository: RemoteCartRepository,
+    private val contactRepository: RemoteContactRepository,
     private val p2pManager: P2pManager,
-    private val firebaseRepository: FirebaseRepository,
     private val userRepository: UserRepository,
-    private val socialDao: SocialDao,
     private val sessionManager: SessionManager, // Inyectamos SessionManager para validar email actual
-    private val mensajeRepository: MensajeRepository,
     private val socialRepository: SocialRepository // Inyectar SocialRepository
 ) : ViewModel() {
 
@@ -51,10 +53,9 @@ class MarketViewModel @Inject constructor(
 
     private val _productosFlow = repo.productos()
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
-    private val _carritoFlow = carritoDao.getCarrito()
+    private val _carritoFlow = MutableStateFlow<List<CarritoItem>>(emptyList())
     private val _adminsFlow = userRepository.getAllAdmins()
-    private val _amigosFlow = socialRepository.getAmigos() // Obtener flujo de amigos
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val _amigosFlow = MutableStateFlow<List<User>>(emptyList())
 
 
     @OptIn(FlowPreview::class)
@@ -101,6 +102,12 @@ class MarketViewModel @Inject constructor(
 
     init {
         viewModelScope.launch { repo.ensureSeeded() }
+        viewModelScope.launch {
+            _carritoFlow.value = cartRepository.getCart()
+        }
+        viewModelScope.launch {
+            // _amigosFlow.value = socialRepository.friends() // This needs to be adapted as it returns List<Solicitud>
+        }
     }
 
     private fun filterProducts(
@@ -167,7 +174,7 @@ class MarketViewModel @Inject constructor(
                      // O idealmente preguntar al usuario, pero por simplicidad de ViewModel, limpiamos.
                      // Sin embargo, para mejor UX, deberíamos notificar.
                      // Por ahora, implementamos limpieza automática: "Nuevo proveedor reemplaza carrito"
-                     carritoDao.clearCarrito()
+                     cartRepository.clear()
                  }
             }
 
@@ -175,9 +182,9 @@ class MarketViewModel @Inject constructor(
             val nuevoQty = (currentQty + delta).coerceAtLeast(0)
 
             if (nuevoQty > 0) {
-                carritoDao.insertItem(CarritoItem(p.id, nuevoQty))
+                _carritoFlow.value = cartRepository.addItem(p.id, nuevoQty)
             } else {
-                carritoDao.deleteItem(p.id)
+                _carritoFlow.value = cartRepository.removeItem(p.id)
             }
         }
     }
@@ -186,11 +193,11 @@ class MarketViewModel @Inject constructor(
 
     fun eliminarDelCarrito(p: Producto) {
         viewModelScope.launch {
-            carritoDao.deleteItem(p.id)
+            _carritoFlow.value = cartRepository.removeItem(p.id)
         }
     }
 
-    fun limpiarCarrito() { viewModelScope.launch { carritoDao.clearCarrito() } }
+    fun limpiarCarrito() { viewModelScope.launch { cartRepository.clear() } }
 
     fun crearProducto(nombre: String, precio: Int, unidad: String, desc: String, uri: String?, creatorEmail: String?) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -214,11 +221,7 @@ class MarketViewModel @Inject constructor(
                 providerEmail = currentEmail
             )
 
-            // 1. Guardar localmente siempre
             repo.agregarProducto(nuevo)
-
-            // 2. Sincronizar SIEMPRE
-            launch { firebaseRepository.upsertProduct(nuevo.id, nuevo.nombre, nuevo.precioCLP, nuevo.unidad, nuevo.descripcion, nuevo.imagenRes, nuevo.imagenUri, nuevo.providerEmail) }
             launch { notificarUpsertProducto(nuevo) }
         }
     }
@@ -228,13 +231,6 @@ class MarketViewModel @Inject constructor(
             // VALIDACIÓN: Verificar si el usuario actual es el dueño del producto
             val currentUserEmail = sessionManager.getUserEmail()
 
-            // Permitimos editar si:
-            // 1. Es el dueño del producto (providerEmail coincide)
-            // 2. O es el usuario "root"
-            // 3. O el producto no tiene dueño asignado (caso borde)
-
-            // Nota: Podríamos consultar el rol del usuario actual si es necesario ser más estrictos,
-            // pero por ahora validamos principalmente la propiedad del producto.
             val isOwner = originalProviderEmail.equals(currentUserEmail, ignoreCase = true)
             val isRoot = currentUserEmail == "root" // Usuario root siempre puede
 
@@ -258,45 +254,14 @@ class MarketViewModel @Inject constructor(
 
             repo.actualizarProducto(actualizado)
 
-            // FIX: Sincronizar SIEMPRE
-            launch { firebaseRepository.upsertProduct(actualizado.id, actualizado.nombre, actualizado.precioCLP, actualizado.unidad, actualizado.descripcion, actualizado.imagenRes, actualizado.imagenUri, actualizado.providerEmail) }
             launch { notificarUpsertProducto(actualizado) }
         }
     }
 
     private suspend fun resolveAndUploadImage(uri: String?): String? {
         if (uri.isNullOrBlank()) return null
-        if (uri.startsWith("http")) return uri
-
-        val uriObj = if (uri.startsWith("/")) Uri.fromFile(File(uri)) else Uri.parse(uri)
-
-        // REINTENTOS MÁS AGRESIVOS Y ROBUSTOS
-        var attempt = 0
-        val maxAttempts = 3 // Intentamos 3 veces
-
-        while (attempt < maxAttempts) {
-            try {
-                // Verificar conectividad básica (simulado por el éxito de la función)
-                val uploadedUrl = firebaseRepository.uploadProductImage(uriObj)
-                if (uploadedUrl != null) {
-                    Log.d(TAG, "✅ Imagen subida correctamente en intento ${attempt + 1}: $uploadedUrl")
-                    return uploadedUrl
-                } else {
-                     Log.w(TAG, "⚠️ Intento ${attempt + 1} de subida devolvió null (posible timeout)")
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ Excepción subiendo imagen (intento ${attempt + 1}): ${e.message}")
-            }
-
-            attempt++
-            if (attempt < maxAttempts) {
-                // Backoff exponencial simple: 1s, 2s...
-                delay(1000L * attempt)
-            }
-        }
-
-        Log.e(TAG, "❌ FALLA CRÍTICA: No se pudo subir imagen tras $maxAttempts intentos. Se retornará null para evitar rutas locales rotas en la nube.")
-        return null
+        // This part needs a replacement for firebaseRepository.uploadProductImage
+        return uri
     }
 
     fun eliminarProducto(producto: Producto) {
@@ -311,9 +276,8 @@ class MarketViewModel @Inject constructor(
                  return@launch
             }
 
-            carritoDao.deleteItem(producto.id)
+            cartRepository.removeItem(producto.id)
             repo.eliminarProducto(producto)
-            launch { firebaseRepository.deleteProduct(producto.id, producto.providerEmail) }
             launch { notificarDeleteProducto(producto.id) }
         }
     }
@@ -371,38 +335,14 @@ class MarketViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             val remitente = userRepository.getUser(emailRemitente) ?: return@launch
 
-            val destinatario = userRepository.getUser(emailDestino) ?: run {
-                val placeholder = User(
-                    name = "Vendedor ($emailDestino)",
-                    email = emailDestino,
-                    passwordHash = "placeholder",
-                    role = "provider"
-                )
-                userRepository.createUser(placeholder)
-                userRepository.getUser(emailDestino)!!
-            }
-
-            val nuevoMensaje = MensajeChat(
-                remitenteId = remitente.id,
-                destinatarioId = destinatario.id,
-                contenido = mensaje,
-                estado = EstadoMensaje.ENVIANDO
+            val msg = MensajeContacto(
+                nombre = remitente.name,
+                email = remitente.email,
+                asunto = "Contacto desde la app",
+                mensaje = mensaje,
+                fecha = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date()),
             )
-
-            val msgId = socialDao.insertMensaje(nuevoMensaje)
-
-            var enviado = p2pManager.sendMessage(
-                senderName = remitente.name,
-                senderEmail = remitente.email,
-                receiverEmail = destinatario.email,
-                content = mensaje
-            )
-
-            if (!enviado) {
-                 enviado = firebaseRepository.sendMessage(remitente, destinatario.email, mensaje)
-            }
-
-            socialDao.updateEstado(msgId, if (enviado) EstadoMensaje.ENVIADO else EstadoMensaje.ERROR)
+            contactRepository.send(msg)
         }
     }
 
@@ -425,11 +365,14 @@ class MarketViewModel @Inject constructor(
             }
             sb.append("\nTotal: $$total")
 
-            mensajeRepository.enviarMensaje(
+            val msg = MensajeContacto(
                 nombre = "Sistema de Ventas",
                 email = currentUserEmail,
-                texto = sb.toString()
+                mensaje = sb.toString(),
+                asunto = "Nueva Compra",
+                fecha = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date()),
             )
+            contactRepository.send(msg)
         }
     }
 }

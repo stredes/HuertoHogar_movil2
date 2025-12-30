@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 17,
-    "identityHash": "f0dc6fd14a851a4983da18c58fc91415",
+    "identityHash": "6512fb426ca9701ec23f22239805b0f6",
     "entities": [
       {
         "tableName": "productos",
@@ -160,7 +160,7 @@
       },
       {
         "tableName": "mensajes_contacto",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `nombre` TEXT NOT NULL, `email` TEXT NOT NULL, `mensaje` TEXT NOT NULL, `fecha` TEXT NOT NULL, `respondido` INTEGER NOT NULL)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `nombre` TEXT NOT NULL, `email` TEXT NOT NULL, `asunto` TEXT NOT NULL, `mensaje` TEXT NOT NULL, `fecha` TEXT NOT NULL, `respondido` INTEGER NOT NULL)",
         "fields": [
           {
             "fieldPath": "id",
@@ -177,6 +177,12 @@
           {
             "fieldPath": "email",
             "columnName": "email",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "asunto",
+            "columnName": "asunto",
             "affinity": "TEXT",
             "notNull": true
           },
@@ -439,7 +445,7 @@
       },
       {
         "tableName": "pedidos",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `pedidoId` TEXT NOT NULL, `compradorEmail` TEXT NOT NULL, `proveedorEmail` TEXT NOT NULL, `detalleJson` TEXT NOT NULL, `totalCLP` INTEGER NOT NULL, `estado` TEXT NOT NULL, `fechaPedido` INTEGER NOT NULL, `metodoPago` TEXT, `datosTransferencia` TEXT, `direccionEntrega` TEXT, `fechaDespacho` INTEGER, `fechaEntrega` INTEGER, `compradorNombre` TEXT, `ultimaActualizacion` INTEGER NOT NULL)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `pedidoId` TEXT NOT NULL, `compradorEmail` TEXT NOT NULL, `proveedorEmail` TEXT NOT NULL, `detalleJson` TEXT NOT NULL, `totalCLP` INTEGER NOT NULL, `estado` TEXT NOT NULL, `fechaPedido` INTEGER NOT NULL, `metodoPago` TEXT, `datosTransferencia` TEXT, `direccionEntrega` TEXT, `fechaDespacho` INTEGER, `fechaEntrega` INTEGER, `compradorNombre` TEXT, `ultimaActualizacion` INTEGER NOT NULL, `motivoCancelacion` TEXT)",
         "fields": [
           {
             "fieldPath": "id",
@@ -530,6 +536,12 @@
             "columnName": "ultimaActualizacion",
             "affinity": "INTEGER",
             "notNull": true
+          },
+          {
+            "fieldPath": "motivoCancelacion",
+            "columnName": "motivoCancelacion",
+            "affinity": "TEXT",
+            "notNull": false
           }
         ],
         "primaryKey": {
@@ -545,7 +557,7 @@
     "views": [],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'f0dc6fd14a851a4983da18c58fc91415')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '6512fb426ca9701ec23f22239805b0f6')"
     ]
   }
 }

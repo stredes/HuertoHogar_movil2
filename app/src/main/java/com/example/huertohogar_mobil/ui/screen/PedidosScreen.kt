@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -21,6 +22,7 @@ import com.example.huertohogar_mobil.viewmodel.PedidoUiState
 import org.json.JSONArray
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -30,8 +32,19 @@ fun MisPedidosScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var pedidoParaPago by remember { mutableStateOf<Pedido?>(null) }
-    var tabSeleccionado by remember { mutableIntStateOf(0) }
+
+    var pedidoACancelar by remember { mutableStateOf<Pedido?>(null) }
+    var motivoCancelacion by remember { mutableStateOf("") }
+
     val tabs = listOf("Activos", "Historial")
+    var selectedTab by rememberSaveable { mutableStateOf(0) }
+    val pagerState = androidx.compose.foundation.pager.rememberPagerState(initialPage = selectedTab) { tabs.size }
+    val scope = rememberCoroutineScope()
+
+    // Mantener sincronizados TabRow y PagerState cuando el usuario desliza
+    LaunchedEffect(pagerState.currentPage) {
+        if (selectedTab != pagerState.currentPage) selectedTab = pagerState.currentPage
+    }
 
     Scaffold(
         topBar = {
@@ -47,25 +60,45 @@ fun MisPedidosScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Tabs
-            TabRow(selectedTabIndex = tabSeleccionado) {
+            // Tabs sincronizadas con el pager
+            TabRow(selectedTabIndex = selectedTab) {
                 tabs.forEachIndexed { index, title ->
                     Tab(
-                        selected = tabSeleccionado == index,
-                        onClick = { tabSeleccionado = index },
+                        selected = selectedTab == index,
+                        onClick = {
+                            selectedTab = index
+                            scope.launch { pagerState.animateScrollToPage(index) }
+                        },
                         text = { Text(title) }
                     )
                 }
             }
 
-            PullToRefreshBox(
-                isRefreshing = uiState.isLoading,
-                onRefresh = { viewModel.refresh() },
-                modifier = Modifier.fillMaxSize()
-            ) {
-                when (tabSeleccionado) {
-                    0 -> MostrarPedidosActivos(uiState, viewModel) { pedidoParaPago = it }
-                    1 -> MostrarHistorialPedidos(uiState)
+            // Indicador de página actual (debug)
+            Text(
+                text = "Página ${selectedTab + 1}/${tabs.size} - Desliza horizontalmente →",
+                modifier = Modifier.padding(8.dp),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+
+            // HorizontalPager FUERA del PullToRefreshBox
+            androidx.compose.foundation.pager.HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize(),
+                userScrollEnabled = true,
+                pageSpacing = 0.dp
+            ) { page ->
+                // PullToRefreshBox DENTRO de cada página
+                PullToRefreshBox(
+                    isRefreshing = uiState.isLoading,
+                    onRefresh = { viewModel.refresh() },
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    when (page) {
+                        0 -> MostrarPedidosActivos(uiState, viewModel, onSeleccionarPago = { pedidoParaPago = it }, onCancelarPedido = { pedidoACancelar = it })
+                        1 -> MostrarHistorialPedidos(uiState)
+                    }
                 }
             }
         }
@@ -81,10 +114,50 @@ fun MisPedidosScreen(
             SeleccionarMetodoPagoDialog(
                 pedido = pedidoParaPago!!,
                 onDismiss = { pedidoParaPago = null },
-                onConfirmar = { metodo, datosTransferencia ->
+                onConfirmar = { metodo: String, datosTransferencia: String? ->
                     viewModel.seleccionarMetodoPago(pedidoParaPago!!.pedidoId, metodo, datosTransferencia)
                     viewModel.marcarComoPagado(pedidoParaPago!!.pedidoId)
                     pedidoParaPago = null
+                }
+            )
+        }
+
+        if (pedidoACancelar != null) {
+            AlertDialog(
+                onDismissRequest = {
+                    pedidoACancelar = null
+                    motivoCancelacion = ""
+                },
+                title = { Text("Cancelar pedido") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Ingresa el motivo de cancelación (requerido por backend)")
+                        OutlinedTextField(
+                            value = motivoCancelacion,
+                            onValueChange = { motivoCancelacion = it },
+                            placeholder = { Text("Motivo") },
+                            singleLine = true
+                        )
+                    }
+                },
+                confirmButton = {
+                    HuertoButton(
+                        text = "Enviar",
+                        onClick = {
+                            pedidoACancelar?.let { pedido ->
+                                val motivo = motivoCancelacion.ifBlank { "Cancelado por comprador" }
+                                viewModel.cancelarPedido(pedido.pedidoId, motivo)
+                            }
+                            pedidoACancelar = null
+                            motivoCancelacion = ""
+                        }
+                    )
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        pedidoACancelar = null
+                        motivoCancelacion = ""
+                    }) { Text("Cerrar") }
                 }
             )
         }
@@ -95,7 +168,8 @@ fun MisPedidosScreen(
 private fun MostrarPedidosActivos(
     uiState: PedidoUiState,
     viewModel: PedidoViewModel,
-    onSeleccionarPago: (Pedido) -> Unit
+    onSeleccionarPago: (Pedido) -> Unit,
+    onCancelarPedido: (Pedido) -> Unit
 ) {
     if (uiState.isLoading && uiState.misPedidosActivos.isEmpty()) {
         Box(
@@ -134,13 +208,14 @@ private fun MostrarPedidosActivos(
                 PedidoCard(
                     pedido = pedido,
                     esProveedor = false,
-                    onAccion = { accion ->
+                    onAccion = { accion: String ->
                         when (accion) {
                             "SELECCIONAR_PAGO" -> onSeleccionarPago(pedido)
                             "CONFIRMAR_ENTREGA" -> viewModel.confirmarEntrega(pedido.pedidoId)
-                            "CANCELAR" -> viewModel.cancelarPedido(pedido.pedidoId)
+                            "CANCELAR" -> onCancelarPedido(pedido)
                         }
-                    }
+                    },
+                    onCancelar = onCancelarPedido
                 )
             }
         }
@@ -189,6 +264,9 @@ fun PedidosProveedorScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
+    var pedidoARechazar by remember { mutableStateOf<Pedido?>(null) }
+    var motivoCancelacion by remember { mutableStateOf("") }
+
     Scaffold(
         topBar = {
             HuertoTopBar(
@@ -228,18 +306,59 @@ fun PedidosProveedorScreen(
                     PedidoCard(
                         pedido = pedido,
                         esProveedor = true,
-                        onAccion = { accion ->
+                        onAccion = { accion: String ->
                             when (accion) {
                                 "CONFIRMAR" -> viewModel.confirmarPedido(pedido.pedidoId)
                                 "LISTO_DESPACHO" -> viewModel.marcarListoDespacho(pedido.pedidoId)
                                 "EN_CAMINO" -> viewModel.marcarEnCamino(pedido.pedidoId)
-                                "CANCELAR" -> viewModel.cancelarPedido(pedido.pedidoId)
+                                "CANCELAR" -> pedidoARechazar = pedido
                             }
-                        }
+                        },
+                        onCancelar = { pedidoARechazar = it }
                     )
                 }
             }
         }
+    }
+
+    if (pedidoARechazar != null) {
+        AlertDialog(
+            onDismissRequest = {
+                pedidoARechazar = null
+                motivoCancelacion = ""
+            },
+            title = { Text("Cancelar pedido") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Ingresa el motivo de cancelación (requerido por backend)")
+                    OutlinedTextField(
+                        value = motivoCancelacion,
+                        onValueChange = { motivoCancelacion = it },
+                        placeholder = { Text("Motivo") },
+                        singleLine = true
+                    )
+                }
+            },
+            confirmButton = {
+                HuertoButton(
+                    text = "Enviar",
+                    onClick = {
+                        pedidoARechazar?.let { pedido ->
+                            val motivo = motivoCancelacion.ifBlank { "Cancelado por proveedor" }
+                            viewModel.cancelarPedido(pedido.pedidoId, motivo)
+                        }
+                        pedidoARechazar = null
+                        motivoCancelacion = ""
+                    }
+                )
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    pedidoARechazar = null
+                    motivoCancelacion = ""
+                }) { Text("Cerrar") }
+            }
+        )
     }
 }
 
@@ -247,7 +366,8 @@ fun PedidosProveedorScreen(
 fun PedidoCard(
     pedido: Pedido,
     esProveedor: Boolean,
-    onAccion: (String) -> Unit
+    onAccion: (String) -> Unit,
+    onCancelar: (Pedido) -> Unit = {}
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -332,20 +452,21 @@ fun PedidoCard(
 
             // Acciones según el estado y rol
             Spacer(modifier = Modifier.height(8.dp))
-            AccionesPedido(
+            PedidoAcciones(
                 pedido = pedido,
                 esProveedor = esProveedor,
-                onAccion = onAccion
+                onAccion = onAccion,
+                onCancelar = onCancelar
             )
         }
     }
 }
 
 @Composable
-private fun EstadoChip(estado: String) {
+fun EstadoChip(estado: String) {
     val estadoEnum = try {
         EstadoPedido.valueOf(estado)
-    } catch (e: Exception) {
+    } catch (_: Exception) {
         EstadoPedido.PENDIENTE
     }
 
@@ -374,20 +495,18 @@ private fun EstadoChip(estado: String) {
 }
 
 @Composable
-private fun AccionesPedido(
+fun PedidoAcciones(
     pedido: Pedido,
     esProveedor: Boolean,
-    onAccion: (String) -> Unit
+    onAccion: (String) -> Unit,
+    onCancelar: (Pedido) -> Unit
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        val estadoEnum = pedido.getEstadoEnum()
-
         if (esProveedor) {
-            // Acciones del proveedor
-            when (estadoEnum) {
+            when (pedido.getEstadoEnum()) {
                 EstadoPedido.PENDIENTE -> {
                     HuertoButton(
                         text = "Confirmar",
@@ -395,188 +514,49 @@ private fun AccionesPedido(
                         modifier = Modifier.weight(1f)
                     )
                     OutlinedButton(
-                        onClick = { onAccion("CANCELAR") },
+                        onClick = { onCancelar(pedido) },
                         modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Rechazar")
-                    }
-                }
-                EstadoPedido.CONFIRMADO, EstadoPedido.ESPERANDO_PAGO -> {
-                    Text(
-                        "Esperando que el cliente seleccione método de pago",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    ) { Text("Rechazar") }
                 }
                 EstadoPedido.PAGADO -> {
                     HuertoButton(
-                        text = "Marcar Listo",
+                        text = "Listo",
                         onClick = { onAccion("LISTO_DESPACHO") },
                         modifier = Modifier.weight(1f)
                     )
                 }
                 EstadoPedido.LISTO_DESPACHO -> {
                     HuertoButton(
-                        text = "En Camino",
+                        text = "En camino",
                         onClick = { onAccion("EN_CAMINO") },
                         modifier = Modifier.weight(1f)
                     )
                 }
-                EstadoPedido.EN_CAMINO, EstadoPedido.ENTREGADO, EstadoPedido.CANCELADO -> {
-                    // No hay acciones disponibles
-                }
+                else -> { /* sin acciones */ }
             }
         } else {
-            // Acciones del comprador
-            when (estadoEnum) {
+            when (pedido.getEstadoEnum()) {
                 EstadoPedido.PENDIENTE -> {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer
-                        )
-                    ) {
-                        Text(
-                            "⏳ Esperando confirmación del proveedor",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            modifier = Modifier.padding(12.dp)
-                        )
-                    }
-                }
-                EstadoPedido.CONFIRMADO -> {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer
-                            )
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Text(
-                                    "✅ Pedido Confirmado",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                                Text(
-                                    "Selecciona tu método de pago para continuar",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                            }
-                        }
-                        HuertoButton(
-                            text = "💳 Confirmar Método de Pago",
-                            onClick = { onAccion("SELECCIONAR_PAGO") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-                EstadoPedido.PAGADO -> {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.tertiaryContainer
-                        )
-                    ) {
-                        Text(
-                            "✅ Pago confirmado. El proveedor está preparando tu pedido",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onTertiaryContainer,
-                            modifier = Modifier.padding(12.dp)
-                        )
-                    }
+                    OutlinedButton(
+                        onClick = { onCancelar(pedido) },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Cancelar") }
                 }
                 EstadoPedido.LISTO_DESPACHO -> {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer
-                        )
-                    ) {
-                        Text(
-                            "📦 Tu pedido está listo y será enviado pronto",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            modifier = Modifier.padding(12.dp)
-                        )
-                    }
+                    HuertoButton(
+                        text = "Recibido",
+                        onClick = { onAccion("CONFIRMAR_ENTREGA") },
+                        modifier = Modifier.weight(1f)
+                    )
                 }
                 EstadoPedido.EN_CAMINO -> {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer
-                            )
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Text(
-                                    "🚚 ¡Tu pedido está en camino!",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                                Text(
-                                    "El delivery llegará pronto. Confirma la recepción cuando lo recibas.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                            }
-                        }
-                        HuertoButton(
-                            text = "✅ Confirmar Recepción del Pedido",
-                            onClick = { onAccion("CONFIRMAR_ENTREGA") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
+                    HuertoButton(
+                        text = "Recibido",
+                        onClick = { onAccion("CONFIRMAR_ENTREGA") },
+                        modifier = Modifier.weight(1f)
+                    )
                 }
-                EstadoPedido.ENTREGADO -> {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant
-                        )
-                    ) {
-                        Text(
-                            "✅ Pedido Entregado y Completado",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(12.dp)
-                        )
-                    }
-                }
-                EstadoPedido.CANCELADO -> {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer
-                        )
-                    ) {
-                        Text(
-                            "❌ Pedido Cancelado",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                            modifier = Modifier.padding(12.dp)
-                        )
-                    }
-                }
-                else -> {
-                    // Estados intermedios sin acción específica
-                }
+                else -> { /* sin acciones */ }
             }
         }
     }
@@ -602,14 +582,9 @@ fun parseDetallePedido(detalleJson: String): List<DetallePedido> {
                 precio = item.getInt("precio")
             )
         }
-    } catch (e: Exception) {
+    } catch (_: Exception) {
         emptyList()
     }
-}
-
-private fun formatFecha(timestamp: Long): String {
-    val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
-    return sdf.format(Date(timestamp))
 }
 
 @Composable
@@ -804,13 +779,18 @@ fun PedidoCardHistorial(pedido: Pedido) {
             }
 
             // Fecha de entrega si existe
-            if (pedido.fechaEntrega != null && pedido.fechaEntrega!! > 0) {
+            val fechaEntrega = pedido.fechaEntrega
+            if (fechaEntrega != null && fechaEntrega > 0) {
                 Text(
-                    text = "Entregado: ${formatFecha(pedido.fechaEntrega!!)}",
+                    text = "Entregado: ${formatFecha(fechaEntrega)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.secondary
                 )
             }
         }
     }
+}
+
+internal fun formatFecha(timestamp: Long): String {
+    return SimpleDateFormat("dd/MM/yyyy HH:mm").format(Date(timestamp))
 }

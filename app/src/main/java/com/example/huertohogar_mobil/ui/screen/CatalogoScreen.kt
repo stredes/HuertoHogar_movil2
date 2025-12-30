@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Store
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -25,6 +26,7 @@ import com.example.huertohogar_mobil.ui.components.HuertoSearchField
 import com.example.huertohogar_mobil.ui.components.HuertoTopBar
 import com.example.huertohogar_mobil.ui.components.ProductoCard
 import com.example.huertohogar_mobil.viewmodel.MarketUiState
+import kotlinx.coroutines.launch
 
 @Composable
 fun CatalogoScreen(
@@ -35,8 +37,26 @@ fun CatalogoScreen(
     onAgregar: (Producto) -> Unit,
     irCarrito: () -> Unit
 ) {
-    // Si no hay proveedor seleccionado y hay multiples proveedores, mostrar dashboard de selección
     val showingProviderSelection = ui.selectedProviderEmail == null && ui.admins.isNotEmpty()
+    val tabs = listOf("Proveedores", "Productos")
+    var selectedTab by rememberSaveable { mutableStateOf(if (showingProviderSelection) 0 else 1) }
+    val pagerState = androidx.compose.foundation.pager.rememberPagerState(initialPage = selectedTab) { tabs.size }
+    val scope = rememberCoroutineScope()
+
+    // Cuando cambia el proveedor seleccionado en el estado, sincronizamos la pestaña
+    LaunchedEffect(ui.selectedProviderEmail) {
+        if (ui.selectedProviderEmail != null && selectedTab != 1) {
+            selectedTab = 1
+            scope.launch { pagerState.animateScrollToPage(1) }
+        } else if (ui.selectedProviderEmail == null && selectedTab != 0 && ui.admins.isNotEmpty()) {
+            selectedTab = 0
+            scope.launch { pagerState.animateScrollToPage(0) }
+        }
+    }
+
+    LaunchedEffect(pagerState.currentPage) {
+        if (selectedTab != pagerState.currentPage) selectedTab = pagerState.currentPage
+    }
 
     Scaffold(
         topBar = {
@@ -58,86 +78,130 @@ fun CatalogoScreen(
         }
     ) { pv ->
         Column(Modifier.padding(pv)) {
-            
-            if (showingProviderSelection) {
-                // MODO DASHBOARD DE PROVEEDORES
-                Text(
-                    "Selecciona un proveedor para ver su catálogo",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(16.dp)
-                )
-
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    items(ui.admins) { admin ->
-                        ProviderCard(
-                            name = admin.name,
-                            email = admin.email,
-                            onClick = { 
-                                // AL HACER CLICK, LLAMAMOS AL CALLBACK
-                                onSelectProvider(admin.email) 
-                            }
-                        )
-                    }
-                    
-                    // Opción para ver productos sin proveedor (o admin general) si existen
-                    item {
-                        ProviderCard(
-                            name = "Red Privada General",
-                            email = "Todos los demás",
-                            onClick = { 
-                                // Usamos un filtro especial o null con flag si quisiéramos "otros"
-                                onSelectProvider("admin@huertohogar.com") 
-                            } 
-                        )
-                    }
-                }
-
-            } else {
-                // MODO LISTA DE PRODUCTOS (DE UN PROVEEDOR O TODOS SI NO HAY ADMINS)
-                var query by remember { mutableStateOf(ui.query) }
-                
-                // Barra de búsqueda dentro del catálogo del proveedor
-                Box(modifier = Modifier.padding(12.dp)) {
-                    HuertoSearchField(
-                        query = query,
-                        onQueryChange = { query = it; onBuscar(it) },
-                        placeholder = "Buscar en este catálogo..."
+            // TabRow sincronizado con pager
+            TabRow(selectedTabIndex = selectedTab) {
+                tabs.forEachIndexed { index, title ->
+                    Tab(
+                        selected = selectedTab == index,
+                        onClick = { selectedTab = index; scope.launch { pagerState.animateScrollToPage(index) } },
+                        text = { Text(title) }
                     )
                 }
-                
-                // LISTA DE PRODUCTOS
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    contentPadding = PaddingValues(bottom = 12.dp)
-                ) {
-                    if (ui.productosFiltrados.isEmpty()) {
-                         item {
-                             Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                                 Text(
-                                     if (ui.selectedProviderEmail != null) "Este proveedor no tiene productos." 
-                                     else "No se encontraron productos.",
-                                     color = MaterialTheme.colorScheme.secondary, 
-                                     textAlign = TextAlign.Center
-                                 )
-                             }
-                         }
-                    } else {
-                        items(ui.productosFiltrados, key = { it.id }) { p ->
-                            ProductoCard(
-                                p = p,
-                                onClick = { onVer(p) },
-                                onAgregar = { onAgregar(p) }
-                            )
+            }
+
+            // Indicador de página actual (debug)
+            Text(
+                text = "Página ${selectedTab + 1}/${tabs.size} - Desliza horizontalmente →",
+                modifier = Modifier.padding(8.dp),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+
+            androidx.compose.foundation.pager.HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize(),
+                userScrollEnabled = true,
+                pageSpacing = 0.dp
+            ) { page ->
+                Box(modifier = Modifier.fillMaxSize()) {
+                    when (page) {
+                    0 -> {
+                        // MODO DASHBOARD DE PROVEEDORES
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            if (ui.admins.isEmpty()) {
+                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    Text("No hay proveedores disponibles", color = MaterialTheme.colorScheme.secondary)
+                                }
+                            } else {
+                                Column(modifier = Modifier.fillMaxSize()) {
+                                    Text(
+                                        "Selecciona un proveedor para ver su catálogo",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        modifier = Modifier.padding(16.dp)
+                                    )
+
+                                    LazyVerticalGrid(
+                                        columns = GridCells.Fixed(2),
+                                        contentPadding = PaddingValues(16.dp),
+                                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                        modifier = Modifier.fillMaxSize()
+                                    ) {
+                                        items(ui.admins) { admin ->
+                                            ProviderCard(
+                                                name = admin.name,
+                                                email = admin.email,
+                                                onClick = {
+                                                    onSelectProvider(admin.email)
+                                                    // El cambio de tab lo gestiona el LaunchedEffect
+                                                }
+                                            )
+                                        }
+                                        // Opción adicional
+                                        item {
+                                            ProviderCard(
+                                                name = "Red Privada General",
+                                                email = "Todos los demás",
+                                                onClick = {
+                                                    onSelectProvider("admin@huertohogar.com")
+                                                    // El cambio de tab lo gestiona el LaunchedEffect
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
+                    1 -> {
+                        // MODO LISTA DE PRODUCTOS (de un proveedor o todos si no hay admins)
+                        var query by remember { mutableStateOf(ui.query) }
+
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            Box(modifier = Modifier.padding(12.dp)) {
+                                HuertoSearchField(
+                                    query = query,
+                                    onQueryChange = { query = it; onBuscar(it) },
+                                    placeholder = "Buscar en este catálogo..."
+                                )
+                            }
+
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                                contentPadding = PaddingValues(bottom = 12.dp)
+                            ) {
+                                if (ui.productosFiltrados.isEmpty()) {
+                                    item {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(32.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                if (ui.selectedProviderEmail != null) "Este proveedor no tiene productos."
+                                                else "No se encontraron productos.",
+                                                color = MaterialTheme.colorScheme.secondary,
+                                                textAlign = TextAlign.Center
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    items(ui.productosFiltrados, key = { it.id }) { p ->
+                                        ProductoCard(
+                                            p = p,
+                                            onClick = { onVer(p) },
+                                            onAgregar = { onAgregar(p) }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 }
             }
         }
@@ -154,7 +218,6 @@ fun ProviderCard(
         modifier = Modifier
             .fillMaxWidth()
             .height(150.dp)
-            // IMPORTANTE: clickable debe ser lo primero o estar en el Modifier externo
             .clickable { onClick() }
     ) {
         Column(

@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.huertohogar_mobil.data.FirebaseRepository
 import com.example.huertohogar_mobil.data.SessionManager
 import com.example.huertohogar_mobil.data.UserRepository
+import com.example.huertohogar_mobil.data.remote.RemoteAuthRepository
 import com.example.huertohogar_mobil.model.User
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -26,7 +27,8 @@ data class AuthUiState(
 class AuthViewModel @Inject constructor(
     private val userRepository: UserRepository,
     private val firebaseRepository: FirebaseRepository,
-    private val sessionManager: SessionManager
+    private val sessionManager: SessionManager,
+    private val remoteAuthRepository: RemoteAuthRepository
 ) : ViewModel() {
 
     // Inicializamos el estado verificando síncronamente si hay sesión guardada para mostrar Loading de inmediato
@@ -56,6 +58,24 @@ class AuthViewModel @Inject constructor(
         }
     }
 
+    fun login(email: String, passwordHash: String) {
+        val safeEmail = email.trim().lowercase()
+        val safePassword = passwordHash.trim()
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, error = null) }
+            val user = withContext(Dispatchers.IO) {
+                // Priorizar backend REST
+                remoteAuthRepository.login(safeEmail, safePassword)
+            }
+            if (user != null) {
+                _uiState.update { it.copy(user = user, isLoading = false) }
+            } else {
+                _uiState.update { it.copy(isLoading = false, error = "Credenciales inválidas") }
+            }
+        }
+    }
+
     fun register(name: String, email: String, passwordHash: String, rut: String) {
         // Limpiamos los datos: quitamos espacios y normalizamos el email
         val safeName = name.trim()
@@ -65,42 +85,17 @@ class AuthViewModel @Inject constructor(
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
-            val success = userRepository.registerUser(safeName, safeEmail, safePassword, safeRut)
-            if (success) {
-                // Registrar también en Firebase para sincronización
-                val user = userRepository.getUser(safeEmail)
-                if (user != null) {
-                    firebaseRepository.registerUser(user)
-                }
-                
-                // Intentamos loguear automáticamente con las credenciales limpias
-                login(safeEmail, safePassword)
-            } else {
-                _uiState.update { it.copy(isLoading = false, error = "El usuario ya existe o el RUT ya está registrado") }
-            }
-        }
-    }
-
-    fun login(email: String, passwordHash: String) {
-        val safeEmail = email.trim().lowercase()
-        val safePassword = passwordHash.trim()
-
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
-            // Ejecutar en IO para no bloquear el hilo principal (mejora de latencia percibida)
             val user = withContext(Dispatchers.IO) {
-                userRepository.loginUser(safeEmail, safePassword)
+                remoteAuthRepository.register(safeName, safeEmail, safePassword, safeRut)
             }
             if (user != null) {
-                sessionManager.saveUserSession(safeEmail) // Guardamos sesión
                 _uiState.update { it.copy(user = user, isLoading = false) }
-                firebaseRepository.initialize(user.email)
             } else {
-                _uiState.update { it.copy(isLoading = false, error = "Credenciales inválidas") }
+                _uiState.update { it.copy(isLoading = false, error = "No se pudo registrar") }
             }
         }
     }
-    
+
     fun verifyEmail(email: String, onResult: (Boolean) -> Unit) {
         viewModelScope.launch {
             val exists = userRepository.verifyUserExists(email.trim().lowercase())
@@ -135,9 +130,8 @@ class AuthViewModel @Inject constructor(
     }
 
     fun logout() {
-        sessionManager.clearSession() // Borramos sesión
+        remoteAuthRepository.logout()
         _uiState.update { it.copy(user = null) }
-        firebaseRepository.cleanup()
     }
     
     fun clearError() {

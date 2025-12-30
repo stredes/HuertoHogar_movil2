@@ -670,7 +670,7 @@ class FirebaseRepository @Inject constructor(
             }
             "CONTACT_FORM" -> {
                 val fecha = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date(timestamp))
-                mensajeDao.insertMensaje(MensajeContacto(0, senderName ?: senderEmail, senderEmail, content, fecha, false))
+                mensajeDao.insertMensaje(MensajeContacto(0, senderName ?: senderEmail, senderEmail, "Contacto desde la app", content, fecha, false))
                 showNotification("Soporte/Contacto", "${senderName ?: senderEmail} envió un formulario")
             }
         }

@@ -110,10 +110,10 @@ class AdminPedidosViewModel @Inject constructor(
         }
     }
 
-    fun rechazarPedido(pedidoId: String) {
+    fun rechazarPedido(pedidoId: String, motivo: String? = null) {
         viewModelScope.launch {
-            Log.d("AdminPedidosViewModel", "Rechazando pedido: $pedidoId")
-            val success = pedidoRepository.cancelarPedido(pedidoId)
+            Log.d("AdminPedidosViewModel", "Rechazando pedido: $pedidoId con motivo: $motivo")
+            val success = pedidoRepository.cancelarPedido(pedidoId, motivo)
             if (success) {
                 Log.d("AdminPedidosViewModel", "✅ Pedido rechazado")
             } else {

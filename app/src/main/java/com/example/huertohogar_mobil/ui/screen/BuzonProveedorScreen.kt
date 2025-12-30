@@ -19,8 +19,6 @@ import com.example.huertohogar_mobil.model.Pedido
 import com.example.huertohogar_mobil.ui.components.HuertoButton
 import com.example.huertohogar_mobil.ui.components.HuertoTopBar
 import com.example.huertohogar_mobil.viewmodel.AdminPedidosViewModel
-import java.text.SimpleDateFormat
-import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -105,7 +103,6 @@ private fun PedidosPendientesTab(
     onMarcarListo: (String) -> Unit,
     onMarcarEnCamino: (String) -> Unit
 ) {
-    // Mostrar pedidos que NO están finalizados (entregados o cancelados)
     val pedidosActivos = pedidos.filter {
         it.estado !in listOf("ENTREGADO", "CANCELADO")
     }
@@ -310,7 +307,6 @@ private fun PedidoProveedorCard(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Header
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -328,12 +324,10 @@ private fun PedidoProveedorCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                EstadoChip(estado = pedido.estado)
             }
 
             HorizontalDivider()
 
-            // Detalles del pedido
             val detalles = parseDetallePedido(pedido.detalleJson)
             Text("Productos:", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
             detalles.forEach { detalle ->
@@ -348,7 +342,6 @@ private fun PedidoProveedorCard(
 
             HorizontalDivider()
 
-            // Dirección y método de pago
             pedido.direccionEntrega?.let { direccion ->
                 Row(verticalAlignment = Alignment.Top) {
                     Icon(
@@ -378,7 +371,6 @@ private fun PedidoProveedorCard(
                 }
             }
 
-            // Total
             Text(
                 text = "Total: ${formatoCLP(pedido.totalCLP)}",
                 style = MaterialTheme.typography.titleLarge,
@@ -392,7 +384,6 @@ private fun PedidoProveedorCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            // Acciones según estado
             AccionesProveedor(
                 pedido = pedido,
                 onConfirmar = onConfirmar,
@@ -417,7 +408,6 @@ private fun AccionesProveedor(
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         when (estadoEnum) {
             EstadoPedido.PENDIENTE -> {
-                // Estado inicial: Confirmar o rechazar pedido
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -444,7 +434,6 @@ private fun AccionesProveedor(
                 )
             }
             EstadoPedido.CONFIRMADO, EstadoPedido.ESPERANDO_PAGO -> {
-                // Esperando que el cliente pague
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
@@ -470,7 +459,6 @@ private fun AccionesProveedor(
                 }
             }
             EstadoPedido.PAGADO -> {
-                // Cliente pagó: Preparar y empacar pedido
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -503,7 +491,6 @@ private fun AccionesProveedor(
                 }
             }
             EstadoPedido.LISTO_DESPACHO -> {
-                // Pedido empacado: Enviar con delivery
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -536,7 +523,6 @@ private fun AccionesProveedor(
                 }
             }
             EstadoPedido.EN_CAMINO -> {
-                // Delivery en camino: Esperando confirmación del cliente
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
@@ -573,7 +559,6 @@ private fun AccionesProveedor(
                 }
             }
             EstadoPedido.ENTREGADO -> {
-                // Pedido completado
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
@@ -600,7 +585,6 @@ private fun AccionesProveedor(
                 }
             }
             EstadoPedido.CANCELADO -> {
-                // Pedido cancelado
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
@@ -770,44 +754,3 @@ private fun PedidoMiniCard(pedido: Pedido) {
         }
     }
 }
-
-@Composable
-private fun EstadoChip(estado: String) {
-    val estadoEnum = try {
-        EstadoPedido.valueOf(estado)
-    } catch (e: Exception) {
-        EstadoPedido.PENDIENTE
-    }
-
-    val (text, color) = when (estadoEnum) {
-        EstadoPedido.PENDIENTE -> "Pendiente" to MaterialTheme.colorScheme.error
-        EstadoPedido.CONFIRMADO -> "Confirmado" to MaterialTheme.colorScheme.primary
-        EstadoPedido.ESPERANDO_PAGO -> "Esperando Pago" to MaterialTheme.colorScheme.tertiary
-        EstadoPedido.PAGADO -> "Pagado" to MaterialTheme.colorScheme.secondary
-        EstadoPedido.LISTO_DESPACHO -> "Listo" to MaterialTheme.colorScheme.primary
-        EstadoPedido.EN_CAMINO -> "En Camino" to MaterialTheme.colorScheme.secondary
-        EstadoPedido.ENTREGADO -> "Entregado" to MaterialTheme.colorScheme.outline
-        EstadoPedido.CANCELADO -> "Cancelado" to MaterialTheme.colorScheme.error
-    }
-
-    Surface(
-        color = color.copy(alpha = 0.2f),
-        shape = MaterialTheme.shapes.small
-    ) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            style = MaterialTheme.typography.labelSmall,
-            color = color
-        )
-    }
-}
-
-// Helper functions
-
-private fun formatFecha(timestamp: Long): String {
-    val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
-    return sdf.format(Date(timestamp))
-}
-
-

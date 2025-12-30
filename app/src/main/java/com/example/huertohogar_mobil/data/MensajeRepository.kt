@@ -14,13 +14,14 @@ class MensajeRepository @Inject constructor(
     fun getMensajes(): Flow<List<MensajeContacto>> = mensajeDao.getAllMensajes()
         .onEach { Log.d(TAG, "Recuperados ${it.size} mensajes de contacto") }
 
-    suspend fun enviarMensaje(nombre: String, email: String, texto: String) {
+    suspend fun enviarMensaje(nombre: String, email: String, asunto: String, texto: String) {
         // Fecha simple actual
         val fecha = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
         
         val nuevoMensaje = MensajeContacto(
             nombre = nombre,
             email = email,
+            asunto = asunto,
             mensaje = texto,
             fecha = fecha
         )

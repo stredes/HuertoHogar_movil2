@@ -417,8 +417,22 @@ class PedidoRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun cancelarPedido(pedidoId: String): Boolean {
-        return updateEstadoPedido(pedidoId, EstadoPedido.CANCELADO)
+    override suspend fun cancelarPedido(pedidoId: String, motivo: String?): Boolean {
+        return try {
+            val updates = mutableMapOf(
+                "estado" to EstadoPedido.CANCELADO.toString(),
+                "ultimaActualizacion" to System.currentTimeMillis()
+            )
+            if (!motivo.isNullOrBlank()) {
+                updates["motivoCancelacion"] = motivo
+            }
+            firestore.collection("pedidos").document(pedidoId).update(updates as Map<String, Any>).await()
+            Log.d(TAG, "Pedido $pedidoId cancelado. Motivo: ${motivo ?: "No especificado"}")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error cancelando pedido", e)
+            false
+        }
     }
 
     private suspend fun updateEstadoPedido(pedidoId: String, nuevoEstado: EstadoPedido): Boolean {

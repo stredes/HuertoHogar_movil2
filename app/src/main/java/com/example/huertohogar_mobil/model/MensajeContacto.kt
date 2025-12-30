@@ -8,6 +8,7 @@ data class MensajeContacto(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val nombre: String,
     val email: String,
+    val asunto: String, // Nuevo campo para el asunto
     val mensaje: String,
     val fecha: String, // Guardaremos fecha como String simple por ahora
     val respondido: Boolean = false

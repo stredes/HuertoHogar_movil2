@@ -45,6 +45,9 @@ android {
                 arguments["room.schemaLocation"] = "$projectDir/schemas"
             }
         }
+
+        buildConfigField("String", "BASE_URL", "\"https://api.tu-backend.com\"")
+        buildConfigField("String", "API_VERSION", "\"v1\"")
     }
 
     buildTypes {
@@ -75,6 +78,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -119,6 +123,12 @@ dependencies {
     // FIX: Forzar versiones de GMS para evitar 'SecurityException: Unknown calling package'
     implementation("com.google.android.gms:play-services-base:18.3.0")
     implementation("com.google.android.gms:play-services-auth:20.7.0")
+
+    implementation(libs.retrofit)
+    implementation(libs.retrofit.converter.gson)
+    implementation(libs.okhttp)
+    implementation(libs.okhttp.logging)
+    implementation(libs.androidx.datastore.preferences)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

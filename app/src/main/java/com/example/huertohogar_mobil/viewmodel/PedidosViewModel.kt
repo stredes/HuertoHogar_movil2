@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.huertohogar_mobil.data.PedidoRepository
 import com.example.huertohogar_mobil.data.SessionManager
+import com.example.huertohogar_mobil.data.remote.RemotePedidoRepository
 import com.example.huertohogar_mobil.model.Pedido
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,7 +19,8 @@ import javax.inject.Inject
 @HiltViewModel
 class PedidosViewModel @Inject constructor(
     private val pedidoRepository: PedidoRepository,
-    private val sessionManager: SessionManager
+    private val sessionManager: SessionManager,
+    private val remotePedidoRepository: RemotePedidoRepository
 ) : ViewModel() {
 
     private val _misPedidos = MutableStateFlow<List<Pedido>>(emptyList())
@@ -39,7 +41,7 @@ class PedidosViewModel @Inject constructor(
 
             Log.d("PedidosViewModel", "✅ Iniciando observador de pedidos para: $userEmail")
 
-            pedidoRepository.getPedidosComoComprador(userEmail)
+            remotePedidoRepository.getPedidosComoComprador(userEmail)
                 .catch { e ->
                     Log.e("PedidosViewModel", "❌ Error al cargar pedidos: ${e.message}")
                 }

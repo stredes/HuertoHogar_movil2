@@ -19,9 +19,10 @@ data class Pedido(
     val fechaDespacho: Long? = null,
     val fechaEntrega: Long? = null,
     val compradorNombre: String? = null,
-    val ultimaActualizacion: Long = 0L
+    val ultimaActualizacion: Long = 0L,
+    val motivoCancelacion: String? = null
 ) {
-    constructor() : this(0, "", "", "", "", 0, "PENDIENTE", 0L, null, null, null, null, null, null, 0L)
+    constructor() : this(0, "", "", "", "", 0, "PENDIENTE", 0L, null, null, null, null, null, null, 0L, null)
 
     // Helper para obtener el estado como enum
     fun getEstadoEnum(): EstadoPedido {

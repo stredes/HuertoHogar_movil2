@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.huertohogar_mobil.data.PedidoRepository
 import com.example.huertohogar_mobil.data.SessionManager
+import com.example.huertohogar_mobil.data.remote.RemotePedidoRepository
 import com.example.huertohogar_mobil.model.EstadoPedido
 import com.example.huertohogar_mobil.model.Pedido
 import com.example.huertohogar_mobil.model.Producto
@@ -40,7 +41,8 @@ data class PedidoUiState(
 @HiltViewModel
 class PedidoViewModel @Inject constructor(
     private val pedidoRepository: PedidoRepository,
-    private val sessionManager: SessionManager
+    private val sessionManager: SessionManager,
+    private val remotePedidoRepository: RemotePedidoRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PedidoUiState())
@@ -99,19 +101,13 @@ class PedidoViewModel @Inject constructor(
     private fun setupObservers(userEmail: String, isProvider: Boolean) {
         viewModelScope.launch {
             if (isProvider) {
-                // Como proveedor: observar pedidos recibidos
-                pedidoRepository.getPedidosComoProveedor(userEmail)
+                remotePedidoRepository.getPedidosComoProveedor(userEmail)
                     .catch { e ->
-                        Log.e("PedidoViewModel", "❌ Error al cargar pedidos del proveedor: ${e.message}")
                         _uiState.update { it.copy(error = "Error al cargar pedidos: ${e.message}", isLoading = false) }
                     }
                     .collect { pedidos ->
-                        Log.d("PedidoViewModel", "✅ Pedidos del proveedor actualizados: ${pedidos.size}")
-
-                        // Separar activos de historial
                         val activos = pedidos.filter { it.estado != EstadoPedido.ENTREGADO.name && it.estado != EstadoPedido.CANCELADO.name }
                         val historial = pedidos.filter { it.estado == EstadoPedido.ENTREGADO.name || it.estado == EstadoPedido.CANCELADO.name }
-
                         _uiState.update {
                             it.copy(
                                 pedidos = pedidos,
@@ -124,19 +120,13 @@ class PedidoViewModel @Inject constructor(
                         }
                     }
             } else {
-                // Como comprador: observar mis pedidos
-                pedidoRepository.getPedidosComoComprador(userEmail)
+                remotePedidoRepository.getPedidosComoComprador(userEmail)
                     .catch { e ->
-                        Log.e("PedidoViewModel", "❌ Error al cargar pedidos del comprador: ${e.message}")
                         _uiState.update { it.copy(error = "Error al cargar pedidos: ${e.message}", isLoading = false) }
                     }
                     .collect { pedidos ->
-                        Log.d("PedidoViewModel", "✅ Pedidos del comprador actualizados: ${pedidos.size}")
-
-                        // Separar activos de historial
                         val activos = pedidos.filter { it.estado != EstadoPedido.ENTREGADO.name && it.estado != EstadoPedido.CANCELADO.name }
                         val historial = pedidos.filter { it.estado == EstadoPedido.ENTREGADO.name || it.estado == EstadoPedido.CANCELADO.name }
-
                         _uiState.update {
                             it.copy(
                                 pedidos = pedidos,
@@ -163,14 +153,6 @@ class PedidoViewModel @Inject constructor(
         viewModelScope.launch {
             val compradorEmail = currentUserEmail ?: return@launch
             val compradorNombre = sessionManager.getUserName() ?: "Cliente"
-
-            Log.d("PedidoViewModel", "🛒 Creando pedido:")
-            Log.d("PedidoViewModel", "  - Comprador: $compradorNombre ($compradorEmail)")
-            Log.d("PedidoViewModel", "  - Proveedor: $proveedorEmail")
-            Log.d("PedidoViewModel", "  - Total: $total")
-            Log.d("PedidoViewModel", "  - Método de pago: $metodoPago")
-            Log.d("PedidoViewModel", "  - Dirección: $direccion")
-
             val detalleJson = JSONArray(
                 carrito.map {
                     JSONObject().apply {
@@ -198,13 +180,8 @@ class PedidoViewModel @Inject constructor(
                 direccionEntrega = direccion
             )
 
-            Log.d("PedidoViewModel", "📦 Pedido a guardar: ${nuevoPedido.pedidoId}")
-
-            val success = pedidoRepository.crearPedido(nuevoPedido)
-            if (success) {
-                Log.d("PedidoViewModel", "✅ Pedido creado exitosamente")
-            } else {
-                Log.e("PedidoViewModel", "❌ Error al crear pedido")
+            val success = remotePedidoRepository.crearPedido(nuevoPedido)
+            if (!success) {
                 _uiState.update { it.copy(error = "No se pudo crear el pedido") }
             }
         }
@@ -224,17 +201,17 @@ class PedidoViewModel @Inject constructor(
     fun marcarListoDespacho(pedidoId: String) = updateEstado(pedidoId, EstadoPedido.LISTO_DESPACHO)
     fun marcarEnCamino(pedidoId: String) = updateEstado(pedidoId, EstadoPedido.EN_CAMINO)
     fun marcarEntregado(pedidoId: String) = updateEstado(pedidoId, EstadoPedido.ENTREGADO)
-    fun cancelarPedido(pedidoId: String) = updateEstado(pedidoId, EstadoPedido.CANCELADO)
+    fun cancelarPedido(pedidoId: String, motivo: String? = null) = updateEstado(pedidoId, EstadoPedido.CANCELADO, motivo)
 
-    private fun updateEstado(pedidoId: String, nuevoEstado: EstadoPedido) {
+    private fun updateEstado(pedidoId: String, nuevoEstado: EstadoPedido, motivo: String? = null) {
         viewModelScope.launch {
             val success = when(nuevoEstado) {
-                EstadoPedido.CONFIRMADO -> pedidoRepository.confirmarPedido(pedidoId)
-                EstadoPedido.PAGADO -> pedidoRepository.marcarComoPagado(pedidoId)
-                EstadoPedido.LISTO_DESPACHO -> pedidoRepository.marcarComoListoDespacho(pedidoId)
-                EstadoPedido.EN_CAMINO -> pedidoRepository.marcarEnCamino(pedidoId)
-                EstadoPedido.ENTREGADO -> pedidoRepository.marcarEntregado(pedidoId)
-                EstadoPedido.CANCELADO -> pedidoRepository.cancelarPedido(pedidoId)
+                EstadoPedido.CONFIRMADO -> remotePedidoRepository.confirmarPedido(pedidoId)
+                EstadoPedido.PAGADO -> remotePedidoRepository.marcarComoPagado(pedidoId)
+                EstadoPedido.LISTO_DESPACHO -> remotePedidoRepository.marcarComoListoDespacho(pedidoId)
+                EstadoPedido.EN_CAMINO -> remotePedidoRepository.marcarEnCamino(pedidoId)
+                EstadoPedido.ENTREGADO -> remotePedidoRepository.marcarEntregado(pedidoId)
+                EstadoPedido.CANCELADO -> remotePedidoRepository.cancelarPedido(pedidoId, motivo)
                 else -> false
             }
             if (!success) {

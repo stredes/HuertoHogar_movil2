@@ -17,6 +17,8 @@ class SessionManager @Inject constructor(
         private const val KEY_USER_EMAIL = "user_email"
         private const val KEY_USER_NAME = "user_name"
         private const val KEY_IS_PROVIDER = "is_provider"
+        private const val KEY_ACCESS = "access_token"
+        private const val KEY_REFRESH = "refresh_token"
     }
 
     fun saveUserSession(email: String, name: String = "", isProvider: Boolean = false) {
@@ -24,6 +26,13 @@ class SessionManager @Inject constructor(
             putString(KEY_USER_EMAIL, email)
             putString(KEY_USER_NAME, name)
             putBoolean(KEY_IS_PROVIDER, isProvider)
+        }
+    }
+
+    fun saveTokens(access: String, refresh: String) {
+        prefs.edit {
+            putString(KEY_ACCESS, access)
+            putString(KEY_REFRESH, refresh)
         }
     }
 
@@ -39,6 +48,9 @@ class SessionManager @Inject constructor(
         return prefs.getBoolean(KEY_IS_PROVIDER, false)
     }
 
+    fun getAccessToken(): String? = prefs.getString(KEY_ACCESS, null)
+    fun getRefreshToken(): String? = prefs.getString(KEY_REFRESH, null)
+
     fun clearSession() {
         // En lugar de borrar todo, podemos considerar mantener algo si es necesario, 
         // pero para cerrar sesión (logout) borrar el email de sesión es correcto.
@@ -47,6 +59,8 @@ class SessionManager @Inject constructor(
             remove(KEY_USER_EMAIL)
             remove(KEY_USER_NAME)
             remove(KEY_IS_PROVIDER)
+            remove(KEY_ACCESS)
+            remove(KEY_REFRESH)
         }
     }
 }

@@ -23,9 +23,8 @@ interface PedidoRepository {
     suspend fun marcarComoListoDespacho(pedidoId: String): Boolean
     suspend fun marcarEnCamino(pedidoId: String): Boolean
     suspend fun marcarEntregado(pedidoId: String): Boolean
-    suspend fun cancelarPedido(pedidoId: String): Boolean
+    suspend fun cancelarPedido(pedidoId: String, motivo: String? = null): Boolean
 
     // Inicialización
     suspend fun inicializarListeners(email: String, esProveedor: Boolean)
 }
-
