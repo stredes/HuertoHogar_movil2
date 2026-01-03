@@ -7,19 +7,43 @@ import okhttp3.Response
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * Interceptor para agregar token de autenticación a las peticiones HTTP
+ * 
+ * NOTA: El uso de runBlocking aquí es necesario porque OkHttp Interceptor es síncrono.
+ * Alternativas:
+ * 1. Usar cache en memoria del token (óptimo)
+ * 2. Mantener runBlocking con timeout corto (actual)
+ * 
+ * Para producción, considerar implementar un cache de token en memoria.
+ */
 @Singleton
 class AuthInterceptor @Inject constructor(
     private val tokenDataStore: TokenDataStore
 ) : Interceptor {
+    
+    /**
+     * Intercepta cada petición HTTP y agrega el header Authorization si existe token
+     */
     override fun intercept(chain: Interceptor.Chain): Response {
         val original = chain.request()
-        val accessToken = runBlocking { tokenDataStore.getAccessToken() }
-        val newReq = if (!accessToken.isNullOrBlank()) {
+        
+        // Obtener token - runBlocking es necesario aquí (limitación de OkHttp)
+        val accessToken = runBlocking { 
+            tokenDataStore.getAccessToken() 
+        }
+        
+        // Agregar header Authorization solo si hay token
+        val newRequest = if (!accessToken.isNullOrBlank()) {
             original.newBuilder()
-                .addHeader("Authorization", "Bearer $accessToken")
+                .header("Authorization", "Bearer $accessToken") // Usar header() en vez de addHeader()
                 .build()
-        } else original
-        return chain.proceed(newReq)
+        } else {
+            original
+        }
+        
+        return chain.proceed(newRequest)
     }
 }
+
 

@@ -3,6 +3,7 @@ package com.example.huertohogar_mobil.network
 import android.util.Log
 import com.example.huertohogar_mobil.data.datastore.TokenDataStore
 import com.example.huertohogar_mobil.network.api.AuthApi
+import com.example.huertohogar_mobil.network.dto.RefreshTokenRequest
 import kotlinx.coroutines.runBlocking
 import okhttp3.Authenticator
 import okhttp3.Request
@@ -10,9 +11,6 @@ import okhttp3.Response
 import okhttp3.Route
 import javax.inject.Inject
 import javax.inject.Singleton
-
-data class RefreshRequest(val refreshToken: String)
-data class RefreshResponse(val accessToken: String, val refreshToken: String)
 
 @Singleton
 class RefreshAuthenticator @Inject constructor(
@@ -28,19 +26,27 @@ class RefreshAuthenticator @Inject constructor(
 
         return try {
             val refreshResp = runBlocking {
-                authApi.refresh(RefreshRequest(currentRefresh))
+                authApi.refresh(RefreshTokenRequest(currentRefresh))
             }
-            val newAccess = refreshResp.accessToken
-            val newRefresh = refreshResp.refreshToken
-            runBlocking { tokenDataStore.saveTokens(newAccess, newRefresh) }
 
-            response.request.newBuilder()
-                .removeHeader("Authorization")
-                .addHeader("Authorization", "Bearer $newAccess")
-                .build()
+            if (refreshResp.isSuccessful && refreshResp.body() != null) {
+                val body = refreshResp.body()!!
+                val newAccess = body.accessToken
+                val newRefresh = body.refreshToken
+                runBlocking { tokenDataStore.saveTokens(newAccess, newRefresh) }
+
+                response.request.newBuilder()
+                    .removeHeader("Authorization")
+                    .addHeader("Authorization", "Bearer $newAccess")
+                    .build()
+            } else {
+                Log.e("RefreshAuth", "Refresh failed: ${refreshResp.code()}")
+                runBlocking { tokenDataStore.clearTokens() }
+                null
+            }
         } catch (e: Exception) {
             Log.e("RefreshAuth", "Refresh failed: ${e.message}")
-            runBlocking { tokenDataStore.clear() }
+            runBlocking { tokenDataStore.clearTokens() }
             null
         }
     }
